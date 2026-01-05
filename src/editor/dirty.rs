@@ -25,7 +25,6 @@ impl DirtyTracker {
     }
 
     /// Returns the number of rows being tracked.
-    #[allow(dead_code)]
     pub fn row_count(&self) -> usize {
         self.row_count
     }
@@ -65,7 +64,6 @@ impl DirtyTracker {
     }
 
     /// Returns true if the given row is dirty.
-    #[allow(dead_code)]
     pub fn is_row_dirty(&self, row: usize) -> bool {
         if row >= self.row_count {
             return false;
@@ -76,19 +74,16 @@ impl DirtyTracker {
     }
 
     /// Returns true if any row is dirty.
-    #[allow(dead_code)]
     pub fn has_dirty(&self) -> bool {
         self.dirty_rows.iter().any(|&chunk| chunk != 0)
     }
 
     /// Returns true if the entire grid was marked as dirty.
-    #[allow(dead_code)]
     pub fn is_full_dirty(&self) -> bool {
         self.full_dirty
     }
 
     /// Returns an iterator over dirty row indices.
-    #[allow(dead_code)]
     pub fn dirty_rows(&self) -> impl Iterator<Item = usize> + '_ {
         (0..self.row_count).filter(|&row| self.is_row_dirty(row))
     }

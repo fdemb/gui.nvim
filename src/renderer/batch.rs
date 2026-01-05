@@ -48,6 +48,15 @@ impl QuadBatch {
         self.instances.len() >= self.capacity
     }
 
+    /// Add a raw quad instance.
+    pub fn push_instance(&mut self, instance: QuadInstance) {
+        if self.is_full() {
+            log::warn!("Batch full, cannot add instance");
+            return;
+        }
+        self.instances.push(instance);
+    }
+
     /// Add a background quad.
     pub fn push_background(&mut self, x: f32, y: f32, width: f32, height: f32, color: [f32; 4]) {
         if self.is_full() {
@@ -150,6 +159,18 @@ impl RenderBatcher {
 
     pub fn push_decoration(&mut self, x: f32, y: f32, width: f32, height: f32, color: [f32; 4]) {
         self.decorations.push_background(x, y, width, height, color);
+    }
+
+    pub fn push_background_instance(&mut self, instance: QuadInstance) {
+        self.backgrounds.push_instance(instance);
+    }
+
+    pub fn push_glyph_instance(&mut self, instance: QuadInstance) {
+        self.glyphs.push_instance(instance);
+    }
+
+    pub fn push_decoration_instance(&mut self, instance: QuadInstance) {
+        self.decorations.push_instance(instance);
     }
 
     pub fn upload(&self, ctx: &GpuContext) {

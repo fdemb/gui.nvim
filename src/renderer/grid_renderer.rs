@@ -4,8 +4,24 @@ use super::atlas::GlyphAtlas;
 use super::batch::RenderBatcher;
 use super::color::u32_to_linear_rgba;
 use super::font::FontSystem;
+use super::pipeline::QuadInstance;
 use super::GpuContext;
 use crate::editor::{CursorShape, EditorState, StyleFlags, UnderlineStyle};
+
+#[derive(Debug, Clone, Default)]
+struct RowQuads {
+    backgrounds: Vec<QuadInstance>,
+    glyphs: Vec<QuadInstance>,
+    decorations: Vec<QuadInstance>,
+}
+
+impl RowQuads {
+    fn clear(&mut self) {
+        self.backgrounds.clear();
+        self.glyphs.clear();
+        self.decorations.clear();
+    }
+}
 
 pub struct GridRenderer {
     batcher: RenderBatcher,
@@ -14,6 +30,7 @@ pub struct GridRenderer {
     cell_width: f32,
     cell_height: f32,
     font_size: Size,
+    row_cache: Vec<RowQuads>,
 }
 
 impl GridRenderer {
@@ -37,6 +54,7 @@ impl GridRenderer {
             cell_width,
             cell_height,
             font_size,
+            row_cache: Vec::new(),
         })
     }
 
@@ -74,122 +92,153 @@ impl GridRenderer {
         default_fg: [f32; 4],
     ) {
         let grid = state.main_grid();
-        let highlights = &state.highlights;
+        let dirty = state.dirty();
+
+        if self.row_cache.len() != grid.height() {
+            self.row_cache.resize(grid.height(), RowQuads::default());
+        }
 
         for row in 0..grid.height() {
-            for col in 0..grid.width() {
-                if let Some(cell) = grid.get(row, col) {
-                    let x = col as f32 * self.cell_width;
-                    let y = row as f32 * self.cell_height;
+            if dirty.is_row_dirty(row) {
+                let mut row_quads = std::mem::take(&mut self.row_cache[row]);
+                row_quads.clear();
+                self.generate_row_quads(ctx, state, row, default_bg, default_fg, &mut row_quads);
+                self.row_cache[row] = row_quads;
+            }
 
-                    let attrs = highlights.get(cell.highlight_id);
-
-                    let (bg, fg) = self.resolve_colors(attrs, default_bg, default_fg);
-
-                    if bg != default_bg {
-                        self.batcher
-                            .push_background(x, y, self.cell_width, self.cell_height, bg);
-                    }
-
-                    if !cell.is_empty() && !cell.is_wide_spacer() {
-                        if let Some(character) = cell.text.chars().next() {
-                            let font_key = self.font_system.font_key_for_style(
-                                attrs.style.contains(StyleFlags::BOLD),
-                                attrs.style.contains(StyleFlags::ITALIC),
-                            );
-
-                            if let Some(cached) = self.atlas.get_glyph(
-                                ctx,
-                                &mut self.font_system,
-                                character,
-                                font_key,
-                                self.font_size,
-                            ) {
-                                if cached.width > 0 && cached.height > 0 {
-                                    let atlas_size = self.atlas.atlas_size() as f32;
-                                    let uv_x = cached.atlas_x as f32 / atlas_size;
-                                    let uv_y = cached.atlas_y as f32 / atlas_size;
-                                    let uv_w = cached.width as f32 / atlas_size;
-                                    let uv_h = cached.height as f32 / atlas_size;
-
-                                    let glyph_x = x + cached.bearing_x as f32;
-                                    let glyph_y = y
-                                        + (self.cell_height
-                                            - self.font_system.descent().abs()
-                                            - cached.bearing_y as f32);
-
-                                    self.batcher.push_glyph(
-                                        glyph_x,
-                                        glyph_y,
-                                        cached.width as f32,
-                                        cached.height as f32,
-                                        uv_x,
-                                        uv_y,
-                                        uv_w,
-                                        uv_h,
-                                        fg,
-                                        cached.is_colored,
-                                    );
-                                }
-                            }
-                        }
-                    }
-
-                    let special_color = attrs
-                        .special
-                        .map(|c| u32_to_linear_rgba(c.0 >> 8))
-                        .unwrap_or(fg);
-
-                    self.push_decorations(x, y, attrs, special_color, fg);
-                }
+            let cache = &self.row_cache[row];
+            for q in &cache.backgrounds {
+                self.batcher.push_background_instance(*q);
+            }
+            for q in &cache.glyphs {
+                self.batcher.push_glyph_instance(*q);
+            }
+            for q in &cache.decorations {
+                self.batcher.push_decoration_instance(*q);
             }
         }
     }
 
-    fn push_decorations(
+    fn generate_row_quads(
         &mut self,
-        x: f32,
-        y: f32,
-        attrs: &crate::editor::HighlightAttributes,
-        special_color: [f32; 4],
-        fg: [f32; 4],
+        ctx: &GpuContext,
+        state: &EditorState,
+        row: usize,
+        default_bg: [f32; 4],
+        default_fg: [f32; 4],
+        quads: &mut RowQuads,
     ) {
-        let underline_style = attrs.underline_style();
-        let has_strikethrough = attrs.has_strikethrough();
+        let grid = state.main_grid();
+        let highlights = &state.highlights;
 
-        if underline_style == UnderlineStyle::None && !has_strikethrough {
-            return;
-        }
+        for col in 0..grid.width() {
+            if let Some(cell) = grid.get(row, col) {
+                let x = col as f32 * self.cell_width;
+                let y = row as f32 * self.cell_height;
 
-        let geom = compute_decoration_geometry(
-            x,
-            y,
-            self.cell_width,
-            self.cell_height,
-            self.font_system.descent(),
-            self.font_system.underline_position(),
-            self.font_system.underline_thickness(),
-            self.font_system.strikeout_position(),
-            self.font_system.strikeout_thickness(),
-            underline_style,
-            has_strikethrough,
-        );
+                let attrs = highlights.get(cell.highlight_id);
 
-        // Underlines use special_color, strikethrough uses fg
-        let underline_count = match underline_style {
-            UnderlineStyle::None => 0,
-            UnderlineStyle::Double => 2,
-            _ => 1,
-        };
+                let (bg, fg) = self.resolve_colors(attrs, default_bg, default_fg);
 
-        for (i, line) in geom.lines.iter().enumerate() {
-            let color = if i < underline_count {
-                special_color
-            } else {
-                fg
-            };
-            self.batcher
-                .push_decoration(line.x, line.y, line.width, line.height, color);
+                if bg != default_bg {
+                    quads.backgrounds.push(QuadInstance::background(
+                        x,
+                        y,
+                        self.cell_width,
+                        self.cell_height,
+                        bg,
+                    ));
+                }
+
+                if !cell.is_empty() && !cell.is_wide_spacer() {
+                    if let Some(character) = cell.text.chars().next() {
+                        let font_key = self.font_system.font_key_for_style(
+                            attrs.style.contains(StyleFlags::BOLD),
+                            attrs.style.contains(StyleFlags::ITALIC),
+                        );
+
+                        if let Some(cached) = self.atlas.get_glyph(
+                            ctx,
+                            &mut self.font_system,
+                            character,
+                            font_key,
+                            self.font_size,
+                        ) {
+                            if cached.width > 0 && cached.height > 0 {
+                                let atlas_size = self.atlas.atlas_size() as f32;
+                                let uv_x = cached.atlas_x as f32 / atlas_size;
+                                let uv_y = cached.atlas_y as f32 / atlas_size;
+                                let uv_w = cached.width as f32 / atlas_size;
+                                let uv_h = cached.height as f32 / atlas_size;
+
+                                let glyph_x = x + cached.bearing_x as f32;
+                                let glyph_y = y
+                                    + (self.cell_height
+                                        - self.font_system.descent().abs()
+                                        - cached.bearing_y as f32);
+
+                                quads.glyphs.push(QuadInstance::glyph(
+                                    glyph_x,
+                                    glyph_y,
+                                    cached.width as f32,
+                                    cached.height as f32,
+                                    uv_x,
+                                    uv_y,
+                                    uv_w,
+                                    uv_h,
+                                    fg,
+                                    cached.is_colored,
+                                ));
+                            }
+                        }
+                    }
+                }
+
+                let special_color = attrs
+                    .special
+                    .map(|c| u32_to_linear_rgba(c.0 >> 8))
+                    .unwrap_or(fg);
+
+                let underline_style = attrs.underline_style();
+                let has_strikethrough = attrs.has_strikethrough();
+
+                if underline_style != UnderlineStyle::None || has_strikethrough {
+                    let geom = compute_decoration_geometry(
+                        x,
+                        y,
+                        self.cell_width,
+                        self.cell_height,
+                        self.font_system.descent(),
+                        self.font_system.underline_position(),
+                        self.font_system.underline_thickness(),
+                        self.font_system.strikeout_position(),
+                        self.font_system.strikeout_thickness(),
+                        underline_style,
+                        has_strikethrough,
+                    );
+
+                    let underline_count = match underline_style {
+                        UnderlineStyle::None => 0,
+                        UnderlineStyle::Double => 2,
+                        _ => 1,
+                    };
+
+                    for (i, line) in geom.lines.iter().enumerate() {
+                        let color = if i < underline_count {
+                            special_color
+                        } else {
+                            fg
+                        };
+                        quads.decorations.push(QuadInstance::background(
+                            line.x,
+                            line.y,
+                            line.width,
+                            line.height,
+                            color,
+                        ));
+                    }
+                }
+            }
         }
     }
 

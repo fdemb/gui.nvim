@@ -107,9 +107,14 @@ async fn run_neovim_loop(
             },
             AppCommand::Resize { cols, rows } => {
                 if let Some(ref nvim) = nvim {
-                    if let Err(e) = nvim.ui_try_resize(cols, rows).await {
-                        log::warn!("Failed to resize UI: {:?}", e);
-                    }
+                    // Spawn resize as a separate task to avoid blocking the command loop
+                    // The resize RPC response may be delayed, which would block input handling
+                    let neovim = nvim.neovim.clone();
+                    tokio::spawn(async move {
+                        if let Err(e) = neovim.ui_try_resize(cols as i64, rows as i64).await {
+                            log::warn!("Failed to resize UI: {:?}", e);
+                        }
+                    });
                 }
             }
             AppCommand::Input(keys) => {

@@ -62,8 +62,8 @@ impl NeovimProcess {
         self.neovim.ui_attach(cols as i64, rows as i64, &opts).await
     }
 
+    #[allow(dead_code)]
     pub async fn ui_try_resize(&self, cols: u64, rows: u64) -> Result<(), Box<CallError>> {
-        log::debug!("Resizing UI to {}x{}", cols, rows);
         self.neovim.ui_try_resize(cols as i64, rows as i64).await
     }
 

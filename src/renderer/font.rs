@@ -10,6 +10,22 @@ use crossfont::{
 pub struct FontConfig {
     pub family: String,
     pub size_pt: f32,
+    pub scale_factor: f32,
+}
+
+impl FontConfig {
+    pub fn with_scale_factor(scale_factor: f64) -> Self {
+        Self {
+            family: default_font_family(),
+            size_pt: 14.0,
+            scale_factor: scale_factor as f32,
+        }
+    }
+
+    /// Returns the font size scaled for the display
+    pub fn scaled_size(&self) -> f32 {
+        self.size_pt * self.scale_factor
+    }
 }
 
 impl Default for FontConfig {
@@ -17,6 +33,7 @@ impl Default for FontConfig {
         Self {
             family: default_font_family(),
             size_pt: 14.0,
+            scale_factor: 1.0,
         }
     }
 }
@@ -77,7 +94,8 @@ pub struct FontSystem {
 impl FontSystem {
     pub fn new(config: &FontConfig) -> Result<Self, FontError> {
         let mut rasterizer = Rasterizer::new()?;
-        let size = Size::new(config.size_pt);
+        // Use scaled size for HiDPI displays
+        let size = Size::new(config.scaled_size());
 
         let regular_desc = FontDesc::new(
             &config.family,

@@ -32,7 +32,7 @@ impl GlyphAtlas {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            format: wgpu::TextureFormat::Rgba8Unorm,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
@@ -137,7 +137,6 @@ impl GlyphAtlas {
         let padded_width = width + ATLAS_PADDING;
         let padded_height = height + ATLAS_PADDING;
 
-        // Check if glyph fits in current row
         if self.current_row_x + padded_width <= self.size {
             let x = self.current_row_x;
             let y = self.current_row_y;
@@ -146,7 +145,6 @@ impl GlyphAtlas {
             return Some((x, y));
         }
 
-        // Start new row
         let new_row_y = self.current_row_y + self.current_row_height;
         if new_row_y + padded_height > self.size {
             log::warn!("Glyph atlas full, cannot allocate {}x{}", width, height);
@@ -160,7 +158,6 @@ impl GlyphAtlas {
         Some((0, new_row_y))
     }
 
-    /// Upload glyph bitmap to the atlas texture.
     fn upload(&self, ctx: &GpuContext, glyph: &RasterizedGlyph, x: u32, y: u32) {
         let rgba_data = self.to_rgba(&glyph.buffer, glyph.width, glyph.height);
 
@@ -185,21 +182,18 @@ impl GlyphAtlas {
         );
     }
 
-    /// Convert RGB/RGBA buffer to RGBA format for the atlas.
     fn to_rgba(&self, buffer: &GlyphBuffer, width: u32, height: u32) -> Vec<u8> {
         let pixel_count = (width * height) as usize;
         let mut rgba = Vec::with_capacity(pixel_count * 4);
 
         match buffer {
             GlyphBuffer::Rgb(data) => {
-                // RGB subpixel data - convert to grayscale alpha mask
                 for i in 0..pixel_count {
                     let idx = i * 3;
                     if idx + 2 < data.len() {
                         let r = data[idx];
                         let g = data[idx + 1];
                         let b = data[idx + 2];
-                        // Use luminance as alpha, white as foreground
                         let alpha = ((r as u32 + g as u32 + b as u32) / 3) as u8;
                         rgba.extend_from_slice(&[255, 255, 255, alpha]);
                     } else {
@@ -208,7 +202,6 @@ impl GlyphAtlas {
                 }
             }
             GlyphBuffer::Rgba(data) => {
-                // Already RGBA (colored glyphs like emoji)
                 if data.len() == pixel_count * 4 {
                     rgba.extend_from_slice(data);
                 } else {
@@ -220,7 +213,6 @@ impl GlyphAtlas {
         rgba
     }
 
-    /// Clear the atlas and cache for font size change.
     #[allow(dead_code)]
     pub fn clear(&mut self, ctx: &GpuContext) {
         self.cache.clear();
@@ -228,7 +220,6 @@ impl GlyphAtlas {
         self.current_row_y = 0;
         self.current_row_height = 0;
 
-        // Recreate texture to clear it
         self.texture = ctx.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Glyph Atlas"),
             size: wgpu::Extent3d {
@@ -239,7 +230,7 @@ impl GlyphAtlas {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            format: wgpu::TextureFormat::Rgba8Unorm,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
@@ -248,7 +239,6 @@ impl GlyphAtlas {
             .create_view(&wgpu::TextureViewDescriptor::default());
     }
 
-    /// Pre-populate cache with ASCII characters.
     pub fn prepopulate_ascii(
         &mut self,
         ctx: &GpuContext,

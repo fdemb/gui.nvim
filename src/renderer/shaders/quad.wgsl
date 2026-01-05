@@ -103,7 +103,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             return tex_color;
         } else {
             // Grayscale glyph: use texture alpha with text color
-            let alpha = textureSample(glyph_atlas, atlas_sampler, input.tex_coord).r;
+            let alpha = textureSample(glyph_atlas, atlas_sampler, input.tex_coord).a;
             return vec4<f32>(input.color.rgb * alpha, alpha * input.color.a);
         }
     } else {

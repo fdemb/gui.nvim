@@ -1,5 +1,6 @@
 mod atlas;
 mod batch;
+mod color;
 mod context;
 mod font;
 mod grid_renderer;
@@ -10,6 +11,7 @@ pub use context::{GpuContext, GpuContextError};
 pub use grid_renderer::GridRendererError;
 
 // Internal imports used by Renderer
+use color::{srgb_to_linear, u32_to_linear_rgba};
 use grid_renderer::GridRenderer;
 use pipeline::RenderPipeline;
 
@@ -30,8 +32,9 @@ pub struct Renderer {
 
 impl Renderer {
     pub async fn new(window: Arc<Window>) -> Result<Self, RendererError> {
+        let scale_factor = window.scale_factor();
         let ctx = GpuContext::new(window).await?;
-        let grid_renderer = GridRenderer::new(&ctx)?;
+        let grid_renderer = GridRenderer::new(&ctx, scale_factor)?;
         let (cell_width, cell_height) = grid_renderer.cell_size();
         let pipeline = RenderPipeline::new(&ctx, cell_width, cell_height);
 
@@ -41,8 +44,9 @@ impl Renderer {
             grid_renderer.atlas().sampler(),
         );
 
-        let default_bg = [0.118, 0.118, 0.118, 1.0]; // #1E1E1E
-        let default_fg = [0.831, 0.831, 0.831, 1.0]; // #D4D4D4
+        // Default colors in linear space (converted from sRGB #1E1E1E and #D4D4D4)
+        let default_bg = [srgb_to_linear(0.118), srgb_to_linear(0.118), srgb_to_linear(0.118), 1.0];
+        let default_fg = [srgb_to_linear(0.831), srgb_to_linear(0.831), srgb_to_linear(0.831), 1.0];
 
         Ok(Self {
             ctx,
@@ -66,8 +70,8 @@ impl Renderer {
     }
 
     pub fn update_default_colors(&mut self, fg: u32, bg: u32) {
-        self.default_fg = u32_to_rgba(fg);
-        self.default_bg = u32_to_rgba(bg);
+        self.default_fg = u32_to_linear_rgba(fg);
+        self.default_bg = u32_to_linear_rgba(bg);
     }
 
     pub fn render(&mut self, state: &EditorState) -> Result<(), wgpu::SurfaceError> {
@@ -142,13 +146,6 @@ impl Renderer {
 
         Ok(())
     }
-}
-
-fn u32_to_rgba(color: u32) -> [f32; 4] {
-    let r = ((color >> 16) & 0xFF) as f32 / 255.0;
-    let g = ((color >> 8) & 0xFF) as f32 / 255.0;
-    let b = (color & 0xFF) as f32 / 255.0;
-    [r, g, b, 1.0]
 }
 
 #[derive(Debug, thiserror::Error)]

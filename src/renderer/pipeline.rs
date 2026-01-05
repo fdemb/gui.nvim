@@ -21,8 +21,6 @@ impl Uniforms {
     }
 
     fn orthographic_projection(width: f32, height: f32) -> [[f32; 4]; 4] {
-        // Maps screen coordinates (0..width, 0..height) to clip space (-1..1, -1..1)
-        // with origin at top-left (y increases downward)
         [
             [2.0 / width, 0.0, 0.0, 0.0],
             [0.0, -2.0 / height, 0.0, 0.0],
@@ -74,7 +72,7 @@ impl QuadInstance {
             uv_offset: [0.0, 0.0],
             uv_size: [0.0, 0.0],
             color,
-            flags: 0, // not textured
+            flags: 0,
             _padding: [0; 3],
         }
     }

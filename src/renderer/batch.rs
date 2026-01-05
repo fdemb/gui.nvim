@@ -1,7 +1,7 @@
 use super::pipeline::QuadInstance;
 use super::GpuContext;
 
-const MAX_BATCH_SIZE: usize = 4096;
+const MAX_BATCH_SIZE: usize = 65536;
 
 /// Batch of quads for efficient GPU submission.
 pub struct QuadBatch {
@@ -96,7 +96,6 @@ impl QuadBatch {
 
     #[allow(dead_code)]
     pub fn vertex_count(&self) -> u32 {
-        // 6 vertices per quad (2 triangles)
         (self.instances.len() * 6) as u32
     }
 
@@ -178,7 +177,8 @@ mod tests {
 
     #[test]
     fn test_quad_batch_capacity() {
-        assert!(MAX_BATCH_SIZE >= 4096);
+        // Should handle large grids: 200x100 = 20k cells, with glyphs + backgrounds + decorations
+        assert!(MAX_BATCH_SIZE >= 65536);
     }
 
     #[test]

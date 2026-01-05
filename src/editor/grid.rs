@@ -155,7 +155,6 @@ impl Grid {
             let hl_id = hl_id.unwrap_or(last_hl_id);
             last_hl_id = hl_id;
 
-            // Handle wide characters (empty string means wide char continuation)
             let is_wide_spacer = text.is_empty();
 
             for _ in 0..*repeat.max(&1) {
@@ -171,8 +170,6 @@ impl Grid {
                 } else {
                     cell.text.clone_from(text);
                     cell.set_wide_spacer(false);
-                    // Check if the previous cell should be marked as wide
-                    // (when this cell is a spacer, the previous was wide)
                 }
                 cell.highlight_id = hl_id;
                 col += 1;
@@ -180,11 +177,6 @@ impl Grid {
         }
     }
 
-    /// Processes a `grid_scroll` event from Neovim.
-    ///
-    /// Scrolls the region defined by (top, bot, left, right) by `rows` rows.
-    /// Positive `rows` means content moves up (scrolling down).
-    /// Negative `rows` means content moves down (scrolling up).
     pub fn scroll(&mut self, top: usize, bot: usize, left: usize, right: usize, rows: i64) {
         if top >= bot || left >= right || top >= self.height || left >= self.width {
             return;
@@ -195,7 +187,6 @@ impl Grid {
         let region_height = bot - top;
 
         if rows.unsigned_abs() as usize >= region_height {
-            // Scroll by more than the region height, just clear
             for row in top..bot {
                 for col in left..right {
                     self.cells[row * self.width + col].clear();
@@ -205,7 +196,6 @@ impl Grid {
         }
 
         if rows > 0 {
-            // Scrolling down (content moves up)
             let rows = rows as usize;
             for row in top..(bot - rows) {
                 for col in left..right {
@@ -214,14 +204,12 @@ impl Grid {
                     self.cells[dst_idx] = self.cells[src_idx].clone();
                 }
             }
-            // Clear the bottom rows that were scrolled in
             for row in (bot - rows)..bot {
                 for col in left..right {
                     self.cells[row * self.width + col].clear();
                 }
             }
         } else {
-            // Scrolling up (content moves down)
             let rows = (-rows) as usize;
             for row in ((top + rows)..bot).rev() {
                 for col in left..right {
@@ -230,7 +218,6 @@ impl Grid {
                     self.cells[dst_idx] = self.cells[src_idx].clone();
                 }
             }
-            // Clear the top rows that were scrolled in
             for row in top..(top + rows) {
                 for col in left..right {
                     self.cells[row * self.width + col].clear();

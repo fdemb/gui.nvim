@@ -107,8 +107,6 @@ async fn run_neovim_loop(
             },
             AppCommand::Resize { cols, rows } => {
                 if let Some(ref nvim) = nvim {
-                    // Spawn resize as a separate task to avoid blocking the command loop
-                    // The resize RPC response may be delayed, which would block input handling
                     let neovim = nvim.neovim.clone();
                     tokio::spawn(async move {
                         if let Err(e) = neovim.ui_try_resize(cols as i64, rows as i64).await {

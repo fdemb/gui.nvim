@@ -1,22 +1,23 @@
 use std::sync::Arc;
 use winit::application::ApplicationHandler;
-use winit::dpi::{LogicalSize, PhysicalSize};
+use winit::dpi::LogicalSize;
 use winit::event::{ElementState, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoopProxy};
 use winit::window::{Window, WindowAttributes, WindowId};
 
+use crate::app::{
+    calculate_grid_size, AppBridge, DEFAULT_CELL_HEIGHT, DEFAULT_CELL_WIDTH, PADDING,
+};
+use crate::bridge::{DEFAULT_COLS, DEFAULT_ROWS};
 use crate::event::{GUIEvent, NeovimEvent, UserEvent};
-
-const DEFAULT_COLS: u32 = 80;
-const DEFAULT_ROWS: u32 = 24;
-const DEFAULT_CELL_WIDTH: u32 = 10;
-const DEFAULT_CELL_HEIGHT: u32 = 20;
-const PADDING: u32 = 2;
 
 pub struct GuiApp {
     window: Option<Arc<Window>>,
     event_proxy: EventLoopProxy<UserEvent>,
+    app_bridge: Option<AppBridge>,
     close_requested: bool,
+    current_cols: u64,
+    current_rows: u64,
 }
 
 impl GuiApp {
@@ -24,13 +25,16 @@ impl GuiApp {
         Self {
             window: None,
             event_proxy,
+            app_bridge: None,
             close_requested: false,
+            current_cols: DEFAULT_COLS,
+            current_rows: DEFAULT_ROWS,
         }
     }
 
     fn create_window(&mut self, event_loop: &ActiveEventLoop) {
-        let width = DEFAULT_COLS * DEFAULT_CELL_WIDTH + 2 * PADDING;
-        let height = DEFAULT_ROWS * DEFAULT_CELL_HEIGHT + 2 * PADDING;
+        let width = DEFAULT_COLS as u32 * DEFAULT_CELL_WIDTH + 2 * PADDING;
+        let height = DEFAULT_ROWS as u32 * DEFAULT_CELL_HEIGHT + 2 * PADDING;
 
         let window_attrs = WindowAttributes::default()
             .with_title("gui.nvim")
@@ -42,6 +46,10 @@ impl GuiApp {
                 log::info!("Window created: {:?}", window.id());
                 let window = Arc::new(window);
                 self.window = Some(window.clone());
+
+                let bridge = AppBridge::new(self.event_proxy.clone());
+                bridge.spawn_neovim();
+                self.app_bridge = Some(bridge);
 
                 let _ = self
                     .event_proxy
@@ -79,6 +87,9 @@ impl ApplicationHandler<UserEvent> for GuiApp {
         match event {
             WindowEvent::CloseRequested => {
                 log::info!("Close requested");
+                if let Some(ref bridge) = self.app_bridge {
+                    bridge.quit();
+                }
                 self.close_requested = true;
                 event_loop.exit();
             }
@@ -86,6 +97,16 @@ impl ApplicationHandler<UserEvent> for GuiApp {
             WindowEvent::Resized(size) => {
                 if size.width > 0 && size.height > 0 {
                     log::debug!("Window resized: {}x{}", size.width, size.height);
+
+                    let (cols, rows) = calculate_grid_size(size);
+                    if cols != self.current_cols || rows != self.current_rows {
+                        self.current_cols = cols;
+                        self.current_rows = rows;
+                        if let Some(ref bridge) = self.app_bridge {
+                            bridge.resize(cols, rows);
+                        }
+                    }
+
                     let _ = self
                         .event_proxy
                         .send_event(UserEvent::GUI(GUIEvent::Resized(size)));
@@ -149,8 +170,8 @@ mod tests {
 
     #[test]
     fn test_default_dimensions() {
-        let width = DEFAULT_COLS * DEFAULT_CELL_WIDTH + 2 * PADDING;
-        let height = DEFAULT_ROWS * DEFAULT_CELL_HEIGHT + 2 * PADDING;
+        let width = DEFAULT_COLS as u32 * DEFAULT_CELL_WIDTH + 2 * PADDING;
+        let height = DEFAULT_ROWS as u32 * DEFAULT_CELL_HEIGHT + 2 * PADDING;
         assert_eq!(width, 804);
         assert_eq!(height, 484);
     }

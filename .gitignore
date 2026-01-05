@@ -2,6 +2,7 @@ reference
 *.md
 !LICENSE.md
 !README.md
+!plan.md
 
 # Rust
 /target

@@ -4,8 +4,8 @@ use std::process::Stdio;
 
 use nvim_rs::compat::tokio::Compat;
 use nvim_rs::create::tokio::new_child_cmd;
-use nvim_rs::error::LoopError;
-use nvim_rs::Neovim;
+use nvim_rs::error::{CallError, LoopError};
+use nvim_rs::{Neovim, UiAttachOptions};
 use tokio::process::{Child, ChildStdin, Command};
 use tokio::task::JoinHandle;
 use winit::event_loop::EventLoopProxy;
@@ -14,6 +14,9 @@ use super::NeovimHandler;
 use crate::event::UserEvent;
 
 pub type NvimWriter = Compat<ChildStdin>;
+
+pub const DEFAULT_COLS: u64 = 80;
+pub const DEFAULT_ROWS: u64 = 24;
 
 pub struct NeovimProcess {
     pub neovim: Neovim<NvimWriter>,
@@ -47,6 +50,37 @@ impl NeovimProcess {
 
     pub async fn quit(&self) -> Result<(), Box<nvim_rs::error::CallError>> {
         self.neovim.command("qa!").await
+    }
+
+    pub async fn ui_attach(&self, cols: u64, rows: u64) -> Result<(), Box<CallError>> {
+        let mut opts = UiAttachOptions::new();
+        opts.set_rgb(true).set_linegrid_external(true);
+
+        log::info!("Attaching UI with dimensions {}x{}", cols, rows);
+        self.neovim.ui_attach(cols as i64, rows as i64, &opts).await
+    }
+
+    pub async fn ui_try_resize(&self, cols: u64, rows: u64) -> Result<(), Box<CallError>> {
+        log::debug!("Resizing UI to {}x{}", cols, rows);
+        self.neovim.ui_try_resize(cols as i64, rows as i64).await
+    }
+
+    pub async fn input(&self, keys: &str) -> Result<i64, Box<CallError>> {
+        self.neovim.input(keys).await
+    }
+
+    pub async fn input_mouse(
+        &self,
+        button: &str,
+        action: &str,
+        modifier: &str,
+        grid: i64,
+        row: i64,
+        col: i64,
+    ) -> Result<(), Box<CallError>> {
+        self.neovim
+            .input_mouse(button, action, modifier, grid, row, col)
+            .await
     }
 }
 
@@ -121,5 +155,11 @@ mod tests {
         // Result depends on whether nvim is installed
         // Just verify it doesn't panic
         let _ = result;
+    }
+
+    #[test]
+    fn test_default_dimensions() {
+        assert_eq!(DEFAULT_COLS, 80);
+        assert_eq!(DEFAULT_ROWS, 24);
     }
 }

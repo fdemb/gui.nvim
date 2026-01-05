@@ -1,0 +1,139 @@
+use std::sync::Arc;
+use tokio::runtime::Runtime;
+use tokio::sync::mpsc;
+use winit::dpi::PhysicalSize;
+use winit::event_loop::EventLoopProxy;
+
+use crate::bridge::{NeovimProcess, DEFAULT_COLS, DEFAULT_ROWS};
+use crate::event::UserEvent;
+
+pub enum AppCommand {
+    SpawnNeovim,
+    Resize { cols: u64, rows: u64 },
+    Input(String),
+    Quit,
+}
+
+pub struct AppBridge {
+    command_tx: mpsc::UnboundedSender<AppCommand>,
+    runtime: Arc<Runtime>,
+}
+
+impl AppBridge {
+    pub fn new(event_proxy: EventLoopProxy<UserEvent>) -> Self {
+        let runtime = Arc::new(Runtime::new().expect("Failed to create tokio runtime"));
+        let (command_tx, command_rx) = mpsc::unbounded_channel();
+
+        let rt = runtime.clone();
+        std::thread::spawn(move || {
+            rt.block_on(async move {
+                run_neovim_loop(event_proxy, command_rx).await;
+            });
+        });
+
+        Self {
+            command_tx,
+            runtime,
+        }
+    }
+
+    pub fn spawn_neovim(&self) {
+        let _ = self.command_tx.send(AppCommand::SpawnNeovim);
+    }
+
+    pub fn resize(&self, cols: u64, rows: u64) {
+        let _ = self.command_tx.send(AppCommand::Resize { cols, rows });
+    }
+
+    pub fn input(&self, keys: String) {
+        let _ = self.command_tx.send(AppCommand::Input(keys));
+    }
+
+    pub fn quit(&self) {
+        let _ = self.command_tx.send(AppCommand::Quit);
+    }
+}
+
+async fn run_neovim_loop(
+    event_proxy: EventLoopProxy<UserEvent>,
+    mut command_rx: mpsc::UnboundedReceiver<AppCommand>,
+) {
+    let mut nvim: Option<NeovimProcess> = None;
+
+    while let Some(cmd) = command_rx.recv().await {
+        match cmd {
+            AppCommand::SpawnNeovim => match NeovimProcess::spawn(event_proxy.clone()).await {
+                Ok(process) => {
+                    if let Err(e) = process.ui_attach(DEFAULT_COLS, DEFAULT_ROWS).await {
+                        log::error!("Failed to attach UI: {:?}", e);
+                        continue;
+                    }
+                    log::info!("Neovim UI attached");
+                    nvim = Some(process);
+                }
+                Err(e) => {
+                    log::error!("Failed to spawn Neovim: {}", e);
+                }
+            },
+            AppCommand::Resize { cols, rows } => {
+                if let Some(ref nvim) = nvim {
+                    if let Err(e) = nvim.ui_try_resize(cols, rows).await {
+                        log::warn!("Failed to resize UI: {:?}", e);
+                    }
+                }
+            }
+            AppCommand::Input(keys) => {
+                if let Some(ref nvim) = nvim {
+                    if let Err(e) = nvim.input(&keys).await {
+                        log::warn!("Failed to send input: {:?}", e);
+                    }
+                }
+            }
+            AppCommand::Quit => {
+                if let Some(ref nvim) = nvim {
+                    let _ = nvim.quit().await;
+                }
+                break;
+            }
+        }
+    }
+}
+
+pub const DEFAULT_CELL_WIDTH: u32 = 10;
+pub const DEFAULT_CELL_HEIGHT: u32 = 20;
+pub const PADDING: u32 = 2;
+
+pub fn calculate_grid_size(size: PhysicalSize<u32>) -> (u64, u64) {
+    let cols = (size.width.saturating_sub(2 * PADDING)) / DEFAULT_CELL_WIDTH;
+    let rows = (size.height.saturating_sub(2 * PADDING)) / DEFAULT_CELL_HEIGHT;
+    (cols.max(1) as u64, rows.max(1) as u64)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_calculate_grid_size() {
+        let size = PhysicalSize::new(804, 484);
+        let (cols, rows) = calculate_grid_size(size);
+        assert_eq!(cols, 80);
+        assert_eq!(rows, 24);
+    }
+
+    #[test]
+    fn test_calculate_grid_size_minimum() {
+        let size = PhysicalSize::new(10, 10);
+        let (cols, rows) = calculate_grid_size(size);
+        assert_eq!(cols, 1);
+        assert_eq!(rows, 1);
+    }
+
+    #[test]
+    fn test_calculate_grid_size_with_padding() {
+        let size = PhysicalSize::new(104, 44);
+        let (cols, rows) = calculate_grid_size(size);
+        assert_eq!(cols, 10);
+        assert_eq!(rows, 2);
+    }
+}

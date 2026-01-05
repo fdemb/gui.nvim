@@ -1,3 +1,4 @@
+mod app;
 mod bridge;
 mod editor;
 mod event;

@@ -65,7 +65,6 @@ impl DirtyTracker {
     }
 
     /// Returns true if the given row is dirty.
-    #[allow(dead_code)]
     pub fn is_row_dirty(&self, row: usize) -> bool {
         if row >= self.row_count {
             return false;

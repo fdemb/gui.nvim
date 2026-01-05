@@ -109,7 +109,6 @@ impl EditorState {
     }
 
     /// Returns the dirty tracker.
-    #[allow(dead_code)]
     pub fn dirty(&self) -> &DirtyTracker {
         &self.dirty
     }

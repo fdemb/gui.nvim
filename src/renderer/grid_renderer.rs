@@ -4,7 +4,7 @@ use super::atlas::GlyphAtlas;
 use super::batch::RenderBatcher;
 use super::font::FontSystem;
 use super::GpuContext;
-use crate::editor::{CursorShape, EditorState, StyleFlags};
+use crate::editor::{CursorShape, EditorState, StyleFlags, UnderlineStyle};
 
 pub struct GridRenderer {
     batcher: RenderBatcher,
@@ -66,7 +66,7 @@ impl GridRenderer {
         self.batcher.upload(ctx);
     }
 
-    /// Prepare grid cells for rendering (backgrounds and glyphs).
+    /// Prepare grid cells for rendering (backgrounds, glyphs, and decorations).
     fn prepare_grid_cells(
         &mut self,
         ctx: &GpuContext,
@@ -140,8 +140,78 @@ impl GridRenderer {
                             }
                         }
                     }
+
+                    // Push decorations (underlines and strikethrough)
+                    let special_color =
+                        attrs.special.map(|c| color_to_rgba(c.0 >> 8)).unwrap_or(fg);
+
+                    self.push_decorations(x, y, attrs, special_color, fg);
                 }
             }
+        }
+    }
+
+    /// Push decoration quads (underlines and strikethrough) for a cell.
+    fn push_decorations(
+        &mut self,
+        x: f32,
+        y: f32,
+        attrs: &crate::editor::HighlightAttributes,
+        special_color: [f32; 4],
+        fg: [f32; 4],
+    ) {
+        let underline_style = attrs.underline_style();
+
+        // Render underlines
+        if underline_style != UnderlineStyle::None {
+            let underline_pos = self.font_system.underline_position();
+            let underline_thickness = self.font_system.underline_thickness();
+            let baseline_y = y + self.cell_height - self.font_system.descent().abs();
+            let underline_y = baseline_y - underline_pos;
+
+            match underline_style {
+                UnderlineStyle::Single
+                | UnderlineStyle::Curl
+                | UnderlineStyle::Dotted
+                | UnderlineStyle::Dashed => {
+                    self.batcher.push_decoration(
+                        x,
+                        underline_y,
+                        self.cell_width,
+                        underline_thickness,
+                        special_color,
+                    );
+                }
+                UnderlineStyle::Double => {
+                    let gap = underline_thickness;
+                    self.batcher.push_decoration(
+                        x,
+                        underline_y - gap,
+                        self.cell_width,
+                        underline_thickness,
+                        special_color,
+                    );
+                    self.batcher.push_decoration(
+                        x,
+                        underline_y + gap,
+                        self.cell_width,
+                        underline_thickness,
+                        special_color,
+                    );
+                }
+                UnderlineStyle::None => {}
+            }
+        }
+
+        // Render strikethrough
+        if attrs.has_strikethrough() {
+            let strikeout_pos = self.font_system.strikeout_position();
+            let strikeout_thickness = self.font_system.strikeout_thickness();
+            let baseline_y = y + self.cell_height - self.font_system.descent().abs();
+            let strikeout_y = baseline_y - strikeout_pos;
+
+            self.batcher
+                .push_decoration(x, strikeout_y, self.cell_width, strikeout_thickness, fg);
         }
     }
 
@@ -318,6 +388,84 @@ pub struct CursorGeometry {
     pub height: f32,
 }
 
+/// Decoration geometry for underlines and strikethrough.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DecorationGeometry {
+    pub lines: Vec<DecorationLine>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DecorationLine {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+}
+
+/// Computes the geometry for decoration lines (underlines, strikethrough).
+pub fn compute_decoration_geometry(
+    x: f32,
+    y: f32,
+    cell_width: f32,
+    cell_height: f32,
+    descent: f32,
+    underline_pos: f32,
+    underline_thickness: f32,
+    strikeout_pos: f32,
+    strikeout_thickness: f32,
+    underline_style: UnderlineStyle,
+    has_strikethrough: bool,
+) -> DecorationGeometry {
+    let mut lines = Vec::new();
+    let baseline_y = y + cell_height - descent.abs();
+
+    if underline_style != UnderlineStyle::None {
+        let underline_y = baseline_y - underline_pos;
+
+        match underline_style {
+            UnderlineStyle::Single
+            | UnderlineStyle::Curl
+            | UnderlineStyle::Dotted
+            | UnderlineStyle::Dashed => {
+                lines.push(DecorationLine {
+                    x,
+                    y: underline_y,
+                    width: cell_width,
+                    height: underline_thickness,
+                });
+            }
+            UnderlineStyle::Double => {
+                let gap = underline_thickness;
+                lines.push(DecorationLine {
+                    x,
+                    y: underline_y - gap,
+                    width: cell_width,
+                    height: underline_thickness,
+                });
+                lines.push(DecorationLine {
+                    x,
+                    y: underline_y + gap,
+                    width: cell_width,
+                    height: underline_thickness,
+                });
+            }
+            UnderlineStyle::None => {}
+        }
+    }
+
+    if has_strikethrough {
+        let strikeout_y = baseline_y - strikeout_pos;
+        lines.push(DecorationLine {
+            x,
+            y: strikeout_y,
+            width: cell_width,
+            height: strikeout_thickness,
+        });
+    }
+
+    DecorationGeometry { lines }
+}
+
 /// Computes the cursor geometry based on shape, position, and cell dimensions.
 /// Returns the bounding box for the cursor.
 pub fn compute_cursor_geometry(
@@ -446,5 +594,106 @@ mod tests {
 
         let geom = compute_cursor_geometry(CursorShape::Horizontal, 0, 0, 2.0, 2.0, 1);
         assert!(geom.height >= 1.0);
+    }
+
+    #[test]
+    fn test_decoration_geometry_single_underline() {
+        let geom = compute_decoration_geometry(
+            0.0,
+            0.0,
+            10.0,
+            20.0,
+            4.0,
+            2.0,
+            1.0,
+            8.0,
+            1.0,
+            UnderlineStyle::Single,
+            false,
+        );
+        assert_eq!(geom.lines.len(), 1);
+        let line = &geom.lines[0];
+        assert_eq!(line.x, 0.0);
+        assert_eq!(line.width, 10.0);
+        assert_eq!(line.height, 1.0);
+    }
+
+    #[test]
+    fn test_decoration_geometry_double_underline() {
+        let geom = compute_decoration_geometry(
+            0.0,
+            0.0,
+            10.0,
+            20.0,
+            4.0,
+            2.0,
+            1.0,
+            8.0,
+            1.0,
+            UnderlineStyle::Double,
+            false,
+        );
+        assert_eq!(geom.lines.len(), 2);
+        assert_eq!(geom.lines[0].width, 10.0);
+        assert_eq!(geom.lines[1].width, 10.0);
+        assert!(geom.lines[0].y != geom.lines[1].y);
+    }
+
+    #[test]
+    fn test_decoration_geometry_strikethrough() {
+        let geom = compute_decoration_geometry(
+            5.0,
+            10.0,
+            10.0,
+            20.0,
+            4.0,
+            2.0,
+            1.0,
+            8.0,
+            1.5,
+            UnderlineStyle::None,
+            true,
+        );
+        assert_eq!(geom.lines.len(), 1);
+        let line = &geom.lines[0];
+        assert_eq!(line.x, 5.0);
+        assert_eq!(line.width, 10.0);
+        assert_eq!(line.height, 1.5);
+    }
+
+    #[test]
+    fn test_decoration_geometry_underline_and_strikethrough() {
+        let geom = compute_decoration_geometry(
+            0.0,
+            0.0,
+            10.0,
+            20.0,
+            4.0,
+            2.0,
+            1.0,
+            8.0,
+            1.0,
+            UnderlineStyle::Single,
+            true,
+        );
+        assert_eq!(geom.lines.len(), 2);
+    }
+
+    #[test]
+    fn test_decoration_geometry_no_decorations() {
+        let geom = compute_decoration_geometry(
+            0.0,
+            0.0,
+            10.0,
+            20.0,
+            4.0,
+            2.0,
+            1.0,
+            8.0,
+            1.0,
+            UnderlineStyle::None,
+            false,
+        );
+        assert!(geom.lines.is_empty());
     }
 }

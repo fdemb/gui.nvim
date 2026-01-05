@@ -105,10 +105,11 @@ impl QuadBatch {
     }
 }
 
-/// Batcher that manages separate batches for backgrounds and glyphs.
+/// Batcher that manages separate batches for backgrounds, glyphs, and decorations.
 pub struct RenderBatcher {
     backgrounds: QuadBatch,
     glyphs: QuadBatch,
+    decorations: QuadBatch,
 }
 
 impl RenderBatcher {
@@ -116,12 +117,14 @@ impl RenderBatcher {
         Self {
             backgrounds: QuadBatch::new(ctx),
             glyphs: QuadBatch::new(ctx),
+            decorations: QuadBatch::new(ctx),
         }
     }
 
     pub fn clear(&mut self) {
         self.backgrounds.clear();
         self.glyphs.clear();
+        self.decorations.clear();
     }
 
     pub fn push_background(&mut self, x: f32, y: f32, width: f32, height: f32, color: [f32; 4]) {
@@ -146,9 +149,14 @@ impl RenderBatcher {
         );
     }
 
+    pub fn push_decoration(&mut self, x: f32, y: f32, width: f32, height: f32, color: [f32; 4]) {
+        self.decorations.push_background(x, y, width, height, color);
+    }
+
     pub fn upload(&self, ctx: &GpuContext) {
         self.backgrounds.upload(ctx);
         self.glyphs.upload(ctx);
+        self.decorations.upload(ctx);
     }
 
     pub fn backgrounds(&self) -> &QuadBatch {
@@ -157,6 +165,10 @@ impl RenderBatcher {
 
     pub fn glyphs(&self) -> &QuadBatch {
         &self.glyphs
+    }
+
+    pub fn decorations(&self) -> &QuadBatch {
+        &self.decorations
     }
 }
 

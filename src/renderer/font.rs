@@ -172,6 +172,22 @@ impl FontSystem {
         self.metrics.descent
     }
 
+    pub fn underline_position(&self) -> f32 {
+        self.metrics.underline_position
+    }
+
+    pub fn underline_thickness(&self) -> f32 {
+        self.metrics.underline_thickness.max(1.0)
+    }
+
+    pub fn strikeout_position(&self) -> f32 {
+        self.metrics.strikeout_position
+    }
+
+    pub fn strikeout_thickness(&self) -> f32 {
+        self.metrics.strikeout_thickness.max(1.0)
+    }
+
     pub fn font_key(&self) -> FontKey {
         self.font_key
     }

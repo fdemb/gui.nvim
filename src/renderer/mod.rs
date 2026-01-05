@@ -129,6 +129,11 @@ impl Renderer {
                 render_pass.set_vertex_buffer(0, batcher.glyphs().buffer().slice(..));
                 render_pass.draw(0..6, 0..batcher.glyphs().instance_count());
             }
+
+            if !batcher.decorations().is_empty() {
+                render_pass.set_vertex_buffer(0, batcher.decorations().buffer().slice(..));
+                render_pass.draw(0..6, 0..batcher.decorations().instance_count());
+            }
         }
 
         self.ctx.queue.submit(std::iter::once(encoder.finish()));

@@ -3,6 +3,8 @@ use winit::dpi::PhysicalSize;
 use winit::event::KeyEvent;
 use winit::window::Window;
 
+use crate::bridge::ui::RedrawEvent;
+
 #[derive(Debug, Clone)]
 pub enum UserEvent {
     Neovim(NeovimEvent),
@@ -11,7 +13,7 @@ pub enum UserEvent {
 
 #[derive(Debug, Clone)]
 pub enum NeovimEvent {
-    Redraw,
+    Redraw(Vec<RedrawEvent>),
     Flush,
     Quit,
 }
@@ -32,7 +34,7 @@ mod tests {
 
     #[test]
     fn test_user_event_debug() {
-        let event = UserEvent::Neovim(NeovimEvent::Redraw);
+        let event = UserEvent::Neovim(NeovimEvent::Redraw(vec![]));
         assert!(format!("{:?}", event).contains("Redraw"));
     }
 
@@ -44,11 +46,11 @@ mod tests {
 
     #[test]
     fn test_neovim_event_variants() {
-        let redraw = NeovimEvent::Redraw;
+        let redraw = NeovimEvent::Redraw(vec![]);
         let flush = NeovimEvent::Flush;
         let quit = NeovimEvent::Quit;
 
-        assert!(matches!(redraw, NeovimEvent::Redraw));
+        assert!(matches!(redraw, NeovimEvent::Redraw(_)));
         assert!(matches!(flush, NeovimEvent::Flush));
         assert!(matches!(quit, NeovimEvent::Quit));
     }

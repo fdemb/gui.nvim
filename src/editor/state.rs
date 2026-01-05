@@ -14,7 +14,7 @@ pub enum CursorShape {
 }
 
 /// Information about a cursor mode.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ModeInfo {
     pub cursor_shape: CursorShape,
     pub cell_percentage: u8,

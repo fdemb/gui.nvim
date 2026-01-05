@@ -9,8 +9,19 @@ use crate::event::UserEvent;
 
 pub enum AppCommand {
     SpawnNeovim,
-    Resize { cols: u64, rows: u64 },
+    Resize {
+        cols: u64,
+        rows: u64,
+    },
     Input(String),
+    MouseInput {
+        button: String,
+        action: String,
+        modifier: String,
+        grid: i64,
+        row: i64,
+        col: i64,
+    },
     Quit,
 }
 
@@ -47,6 +58,25 @@ impl AppBridge {
 
     pub fn input(&self, keys: String) {
         let _ = self.command_tx.send(AppCommand::Input(keys));
+    }
+
+    pub fn mouse_input(
+        &self,
+        button: &str,
+        action: &str,
+        modifier: &str,
+        grid: i64,
+        row: i64,
+        col: i64,
+    ) {
+        let _ = self.command_tx.send(AppCommand::MouseInput {
+            button: button.to_string(),
+            action: action.to_string(),
+            modifier: modifier.to_string(),
+            grid,
+            row,
+            col,
+        });
     }
 
     pub fn quit(&self) {
@@ -86,6 +116,23 @@ async fn run_neovim_loop(
                 if let Some(ref nvim) = nvim {
                     if let Err(e) = nvim.input(&keys).await {
                         log::warn!("Failed to send input: {:?}", e);
+                    }
+                }
+            }
+            AppCommand::MouseInput {
+                button,
+                action,
+                modifier,
+                grid,
+                row,
+                col,
+            } => {
+                if let Some(ref nvim) = nvim {
+                    if let Err(e) = nvim
+                        .input_mouse(&button, &action, &modifier, grid, row, col)
+                        .await
+                    {
+                        log::warn!("Failed to send mouse input: {:?}", e);
                     }
                 }
             }

@@ -9,7 +9,11 @@ use crate::app::{
     calculate_grid_size, AppBridge, DEFAULT_CELL_HEIGHT, DEFAULT_CELL_WIDTH, PADDING,
 };
 use crate::bridge::{DEFAULT_COLS, DEFAULT_ROWS};
-use crate::event::{GUIEvent, NeovimEvent, UserEvent};
+use crate::event::{GUIEvent, UserEvent};
+use crate::input::{
+    key_event_to_neovim, modifiers_to_string, mouse_button_to_type, pixel_to_grid,
+    scroll_delta_to_direction, CellMetrics, Modifiers, MouseAction, MouseState,
+};
 
 pub struct GuiApp {
     window: Option<Arc<Window>>,
@@ -18,6 +22,9 @@ pub struct GuiApp {
     close_requested: bool,
     current_cols: u64,
     current_rows: u64,
+    modifiers: Modifiers,
+    mouse_state: MouseState,
+    cell_metrics: CellMetrics,
 }
 
 impl GuiApp {
@@ -29,6 +36,14 @@ impl GuiApp {
             close_requested: false,
             current_cols: DEFAULT_COLS,
             current_rows: DEFAULT_ROWS,
+            modifiers: Modifiers::default(),
+            mouse_state: MouseState::new(),
+            cell_metrics: CellMetrics {
+                cell_width: DEFAULT_CELL_WIDTH as f64,
+                cell_height: DEFAULT_CELL_HEIGHT as f64,
+                padding_x: PADDING as f64,
+                padding_y: PADDING as f64,
+            },
         }
     }
 
@@ -60,10 +75,6 @@ impl GuiApp {
                 self.close_requested = true;
             }
         }
-    }
-
-    pub fn window(&self) -> Option<&Arc<Window>> {
-        self.window.as_ref()
     }
 }
 
@@ -119,11 +130,100 @@ impl ApplicationHandler<UserEvent> for GuiApp {
                     .send_event(UserEvent::GUI(GUIEvent::RedrawRequested));
             }
 
+            WindowEvent::ModifiersChanged(modifiers) => {
+                self.modifiers = Modifiers::from(modifiers.state());
+            }
+
             WindowEvent::KeyboardInput { event, .. } => {
+                if let Some(keys) = key_event_to_neovim(&event, &self.modifiers) {
+                    log::trace!("Keyboard input: {}", keys);
+                    if let Some(ref bridge) = self.app_bridge {
+                        bridge.input(keys);
+                    }
+                }
+
+                // Also forward to event system for other handlers
                 if event.state == ElementState::Pressed {
                     let _ = self
                         .event_proxy
                         .send_event(UserEvent::GUI(GUIEvent::KeyboardInput(event)));
+                }
+            }
+
+            WindowEvent::MouseInput { state, button, .. } => {
+                if let Some(button_type) = mouse_button_to_type(button) {
+                    if let Some(grid_pos) = self.mouse_state.last_position {
+                        let action = match state {
+                            ElementState::Pressed => {
+                                self.mouse_state.button_pressed(button_type);
+                                MouseAction::Press
+                            }
+                            ElementState::Released => {
+                                self.mouse_state.button_released();
+                                MouseAction::Release
+                            }
+                        };
+
+                        let modifier_str = modifiers_to_string(&self.modifiers);
+                        if let Some(ref bridge) = self.app_bridge {
+                            bridge.mouse_input(
+                                button_type.as_str(),
+                                action.as_str(),
+                                &modifier_str,
+                                0, // grid 0 for single-grid mode
+                                grid_pos.row,
+                                grid_pos.col,
+                            );
+                        }
+                    }
+                }
+            }
+
+            WindowEvent::CursorMoved { position, .. } => {
+                let grid_pos = pixel_to_grid(position, &self.cell_metrics);
+                let old_pos = self.mouse_state.last_position;
+                self.mouse_state.update_position(grid_pos);
+
+                // Send drag event if button is pressed and position changed
+                if self.mouse_state.is_dragging() {
+                    if old_pos
+                        .map(|p| p.row != grid_pos.row || p.col != grid_pos.col)
+                        .unwrap_or(true)
+                    {
+                        if let Some(button_type) = self.mouse_state.pressed_button {
+                            let modifier_str = modifiers_to_string(&self.modifiers);
+                            if let Some(ref bridge) = self.app_bridge {
+                                bridge.mouse_input(
+                                    button_type.as_str(),
+                                    MouseAction::Drag.as_str(),
+                                    &modifier_str,
+                                    0,
+                                    grid_pos.row,
+                                    grid_pos.col,
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+
+            WindowEvent::MouseWheel { delta, .. } => {
+                if let Some(grid_pos) = self.mouse_state.last_position {
+                    if let Some((direction, count)) = scroll_delta_to_direction(delta) {
+                        let modifier_str = modifiers_to_string(&self.modifiers);
+                        if let Some(ref bridge) = self.app_bridge {
+                            for _ in 0..count {
+                                bridge.mouse_input(
+                                    "wheel",
+                                    direction.as_str(),
+                                    &modifier_str,
+                                    0,
+                                    grid_pos.row,
+                                    grid_pos.col,
+                                );
+                            }
+                        }
+                    }
                 }
             }
 
@@ -145,7 +245,7 @@ impl ApplicationHandler<UserEvent> for GuiApp {
         }
     }
 
-    fn user_event(&mut self, event_loop: &ActiveEventLoop, event: UserEvent) {
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: UserEvent) {
         match event {
             UserEvent::Neovim(neovim_event) => {
                 log::trace!("Received Neovim event: {:?}", neovim_event);

@@ -89,7 +89,7 @@ impl QuadInstance {
         color: [f32; 4],
         is_colored: bool,
     ) -> Self {
-        let flags = 1 | if is_colored { 2 } else { 0 };
+        let flags = FLAG_TEXTURED | if is_colored { FLAG_COLORED_GLYPH } else { 0 };
         Self {
             position: [x, y],
             size: [width, height],
@@ -102,9 +102,7 @@ impl QuadInstance {
     }
 }
 
-#[allow(dead_code)]
 pub const FLAG_TEXTURED: u32 = 1;
-#[allow(dead_code)]
 pub const FLAG_COLORED_GLYPH: u32 = 2;
 
 pub struct RenderPipeline {

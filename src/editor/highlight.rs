@@ -20,41 +20,6 @@ impl Color {
         let b = (rgb & 0xFF) as u8;
         Self::from_rgb(r, g, b)
     }
-
-    /// Returns the red component.
-    #[allow(dead_code)]
-    pub const fn r(self) -> u8 {
-        ((self.0 >> 24) & 0xFF) as u8
-    }
-
-    /// Returns the green component.
-    #[allow(dead_code)]
-    pub const fn g(self) -> u8 {
-        ((self.0 >> 16) & 0xFF) as u8
-    }
-
-    /// Returns the blue component.
-    #[allow(dead_code)]
-    pub const fn b(self) -> u8 {
-        ((self.0 >> 8) & 0xFF) as u8
-    }
-
-    /// Returns the alpha component.
-    #[allow(dead_code)]
-    pub const fn a(self) -> u8 {
-        (self.0 & 0xFF) as u8
-    }
-
-    /// Returns the color as normalized float array [r, g, b, a] for GPU.
-    #[allow(dead_code)]
-    pub fn to_f32_array(self) -> [f32; 4] {
-        [
-            self.r() as f32 / 255.0,
-            self.g() as f32 / 255.0,
-            self.b() as f32 / 255.0,
-            self.a() as f32 / 255.0,
-        ]
-    }
 }
 
 bitflags! {
@@ -258,34 +223,6 @@ impl HighlightMap {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_color_from_rgb() {
-        let color = Color::from_rgb(0xFF, 0x80, 0x00);
-        assert_eq!(color.r(), 0xFF);
-        assert_eq!(color.g(), 0x80);
-        assert_eq!(color.b(), 0x00);
-        assert_eq!(color.a(), 0xFF);
-    }
-
-    #[test]
-    fn test_color_from_u24() {
-        // Neovim sends colors as 24-bit RGB
-        let color = Color::from_u24(0xFF8000);
-        assert_eq!(color.r(), 0xFF);
-        assert_eq!(color.g(), 0x80);
-        assert_eq!(color.b(), 0x00);
-    }
-
-    #[test]
-    fn test_color_to_f32_array() {
-        let color = Color::from_rgb(255, 128, 0);
-        let arr = color.to_f32_array();
-        assert!((arr[0] - 1.0).abs() < 0.01);
-        assert!((arr[1] - 0.5).abs() < 0.01);
-        assert!((arr[2] - 0.0).abs() < 0.01);
-        assert!((arr[3] - 1.0).abs() < 0.01);
-    }
 
     #[test]
     fn test_underline_style_from_flags() {

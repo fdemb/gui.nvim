@@ -135,8 +135,10 @@ impl GridRenderer {
                         }
                     }
 
-                    let special_color =
-                        attrs.special.map(|c| u32_to_linear_rgba(c.0 >> 8)).unwrap_or(fg);
+                    let special_color = attrs
+                        .special
+                        .map(|c| u32_to_linear_rgba(c.0 >> 8))
+                        .unwrap_or(fg);
 
                     self.push_decorations(x, y, attrs, special_color, fg);
                 }

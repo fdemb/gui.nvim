@@ -70,4 +70,3 @@ mod tests {
         assert!((rgba[2] - 0.0).abs() < 0.0001);
     }
 }
-

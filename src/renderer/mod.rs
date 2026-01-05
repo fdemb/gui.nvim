@@ -45,8 +45,18 @@ impl Renderer {
         );
 
         // Default colors in linear space (converted from sRGB #1E1E1E and #D4D4D4)
-        let default_bg = [srgb_to_linear(0.118), srgb_to_linear(0.118), srgb_to_linear(0.118), 1.0];
-        let default_fg = [srgb_to_linear(0.831), srgb_to_linear(0.831), srgb_to_linear(0.831), 1.0];
+        let default_bg = [
+            srgb_to_linear(0.118),
+            srgb_to_linear(0.118),
+            srgb_to_linear(0.118),
+            1.0,
+        ];
+        let default_fg = [
+            srgb_to_linear(0.831),
+            srgb_to_linear(0.831),
+            srgb_to_linear(0.831),
+            1.0,
+        ];
 
         Ok(Self {
             ctx,

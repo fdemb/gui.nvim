@@ -113,7 +113,7 @@ impl GuiApp {
                 let mut cx = Context::from_waker(&waker);
 
                 match future.as_mut().poll(&mut cx) {
-                    Poll::Ready(Ok(mut renderer)) => {
+                    Poll::Ready(Ok(renderer)) => {
                         log::info!("GPU renderer initialized");
                         let (cw, ch) = renderer.cell_size();
                         self.cell_metrics.cell_width = cw as f64;

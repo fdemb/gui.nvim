@@ -8,6 +8,7 @@ pub enum MouseAction {
     Press,
     Release,
     Drag,
+    #[allow(dead_code)]
     Move,
 }
 

@@ -89,6 +89,7 @@ fn named_key_to_str(key: NamedKey) -> Option<String> {
     Some(s.to_string())
 }
 
+#[allow(dead_code)]
 fn is_special_key(key: &Key) -> bool {
     matches!(key, Key::Named(_))
 }

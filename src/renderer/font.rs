@@ -35,6 +35,7 @@ fn default_font_family() -> String {
 /// Rasterized glyph with positioning data.
 #[derive(Clone)]
 pub struct RasterizedGlyph {
+    #[allow(dead_code)]
     pub character: char,
     pub width: u32,
     pub height: u32,
@@ -54,6 +55,7 @@ impl GlyphBuffer {
         matches!(self, GlyphBuffer::Rgba(_))
     }
 
+    #[allow(dead_code)]
     pub fn as_bytes(&self) -> &[u8] {
         match self {
             GlyphBuffer::Rgb(b) | GlyphBuffer::Rgba(b) => b,
@@ -156,6 +158,7 @@ impl FontSystem {
         Ok(rasterizer.load_font(&desc, size)?)
     }
 
+    #[allow(dead_code)]
     pub fn metrics(&self) -> &Metrics {
         &self.metrics
     }
@@ -262,6 +265,7 @@ impl GlyphCache {
         self.cache.insert(key, glyph);
     }
 
+    #[allow(dead_code)]
     pub fn clear(&mut self) {
         self.cache.clear();
     }

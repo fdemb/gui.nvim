@@ -43,6 +43,7 @@ impl GridRenderer {
         (self.cell_width, self.cell_height)
     }
 
+    #[allow(dead_code)]
     pub fn font_system(&self) -> &FontSystem {
         &self.font_system
     }
@@ -381,6 +382,7 @@ fn color_to_rgba(color: u32) -> [f32; 4] {
 
 /// Cursor geometry for rendering.
 #[derive(Debug, Clone, PartialEq)]
+#[allow(dead_code)]
 pub struct CursorGeometry {
     pub x: f32,
     pub y: f32,
@@ -390,11 +392,13 @@ pub struct CursorGeometry {
 
 /// Decoration geometry for underlines and strikethrough.
 #[derive(Debug, Clone, PartialEq)]
+#[allow(dead_code)]
 pub struct DecorationGeometry {
     pub lines: Vec<DecorationLine>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[allow(dead_code)]
 pub struct DecorationLine {
     pub x: f32,
     pub y: f32,
@@ -403,6 +407,7 @@ pub struct DecorationLine {
 }
 
 /// Computes the geometry for decoration lines (underlines, strikethrough).
+#[allow(dead_code)]
 pub fn compute_decoration_geometry(
     x: f32,
     y: f32,
@@ -468,6 +473,7 @@ pub fn compute_decoration_geometry(
 
 /// Computes the cursor geometry based on shape, position, and cell dimensions.
 /// Returns the bounding box for the cursor.
+#[allow(dead_code)]
 pub fn compute_cursor_geometry(
     cursor_shape: CursorShape,
     row: usize,

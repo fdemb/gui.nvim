@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
-use winit::dpi::PhysicalSize;
 use winit::event_loop::EventLoopProxy;
 
 use crate::bridge::{NeovimProcess, DEFAULT_COLS, DEFAULT_ROWS};
@@ -27,6 +26,7 @@ pub enum AppCommand {
 
 pub struct AppBridge {
     command_tx: mpsc::UnboundedSender<AppCommand>,
+    #[allow(dead_code)]
     runtime: Arc<Runtime>,
 }
 
@@ -146,19 +146,23 @@ async fn run_neovim_loop(
     }
 }
 
-pub const DEFAULT_CELL_WIDTH: u32 = 10;
-pub const DEFAULT_CELL_HEIGHT: u32 = 20;
 pub const PADDING: u32 = 2;
 
-pub fn calculate_grid_size(size: PhysicalSize<u32>) -> (u64, u64) {
-    let cols = (size.width.saturating_sub(2 * PADDING)) / DEFAULT_CELL_WIDTH;
-    let rows = (size.height.saturating_sub(2 * PADDING)) / DEFAULT_CELL_HEIGHT;
-    (cols.max(1) as u64, rows.max(1) as u64)
-}
+#[cfg(test)]
+const DEFAULT_CELL_WIDTH: u32 = 10;
+#[cfg(test)]
+const DEFAULT_CELL_HEIGHT: u32 = 20;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use winit::dpi::PhysicalSize;
+
+    fn calculate_grid_size(size: PhysicalSize<u32>) -> (u64, u64) {
+        let cols = (size.width.saturating_sub(2 * PADDING)) / DEFAULT_CELL_WIDTH;
+        let rows = (size.height.saturating_sub(2 * PADDING)) / DEFAULT_CELL_HEIGHT;
+        (cols.max(1) as u64, rows.max(1) as u64)
+    }
 
     #[test]
     fn test_calculate_grid_size() {

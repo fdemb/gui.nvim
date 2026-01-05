@@ -1,5 +1,3 @@
-use wgpu::util::DeviceExt;
-
 use super::pipeline::QuadInstance;
 use super::GpuContext;
 
@@ -41,6 +39,7 @@ impl QuadBatch {
         self.instances.is_empty()
     }
 
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.instances.len()
     }
@@ -95,6 +94,7 @@ impl QuadBatch {
         &self.buffer
     }
 
+    #[allow(dead_code)]
     pub fn vertex_count(&self) -> u32 {
         // 6 vertices per quad (2 triangles)
         (self.instances.len() * 6) as u32

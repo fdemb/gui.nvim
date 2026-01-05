@@ -40,6 +40,7 @@ impl Default for Cell {
 
 impl Cell {
     /// Creates a new cell with the given text and highlight ID.
+    #[allow(dead_code)]
     pub fn new(text: impl Into<String>, highlight_id: u64) -> Self {
         Self {
             text: text.into(),
@@ -56,6 +57,7 @@ impl Cell {
     }
 
     /// Returns true if this cell contains a wide character.
+    #[allow(dead_code)]
     pub fn is_wide(&self) -> bool {
         self.flags.contains(CellFlags::WIDE_CHAR)
     }

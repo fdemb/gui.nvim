@@ -22,26 +22,31 @@ impl Color {
     }
 
     /// Returns the red component.
+    #[allow(dead_code)]
     pub const fn r(self) -> u8 {
         ((self.0 >> 24) & 0xFF) as u8
     }
 
     /// Returns the green component.
+    #[allow(dead_code)]
     pub const fn g(self) -> u8 {
         ((self.0 >> 16) & 0xFF) as u8
     }
 
     /// Returns the blue component.
+    #[allow(dead_code)]
     pub const fn b(self) -> u8 {
         ((self.0 >> 8) & 0xFF) as u8
     }
 
     /// Returns the alpha component.
+    #[allow(dead_code)]
     pub const fn a(self) -> u8 {
         (self.0 & 0xFF) as u8
     }
 
     /// Returns the color as normalized float array [r, g, b, a] for GPU.
+    #[allow(dead_code)]
     pub fn to_f32_array(self) -> [f32; 4] {
         [
             self.r() as f32 / 255.0,
@@ -118,11 +123,13 @@ pub struct HighlightAttributes {
 
 impl HighlightAttributes {
     /// Creates new highlight attributes.
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Returns the effective foreground color, applying reverse if set.
+    #[allow(dead_code)]
     pub fn effective_fg(&self, defaults: &DefaultColors) -> Color {
         if self.style.contains(StyleFlags::REVERSE) {
             self.background.unwrap_or(defaults.background)
@@ -132,6 +139,7 @@ impl HighlightAttributes {
     }
 
     /// Returns the effective background color, applying reverse if set.
+    #[allow(dead_code)]
     pub fn effective_bg(&self, defaults: &DefaultColors) -> Color {
         if self.style.contains(StyleFlags::REVERSE) {
             self.foreground.unwrap_or(defaults.foreground)
@@ -141,6 +149,7 @@ impl HighlightAttributes {
     }
 
     /// Returns the special color for underlines.
+    #[allow(dead_code)]
     pub fn effective_special(&self, defaults: &DefaultColors) -> Color {
         self.special.or(self.foreground).unwrap_or(defaults.special)
     }
@@ -151,11 +160,13 @@ impl HighlightAttributes {
     }
 
     /// Returns true if the text should be bold.
+    #[allow(dead_code)]
     pub fn is_bold(&self) -> bool {
         self.style.contains(StyleFlags::BOLD)
     }
 
     /// Returns true if the text should be italic.
+    #[allow(dead_code)]
     pub fn is_italic(&self) -> bool {
         self.style.contains(StyleFlags::ITALIC)
     }
@@ -238,6 +249,7 @@ impl HighlightMap {
     }
 
     /// Clears all defined highlights (but keeps defaults).
+    #[allow(dead_code)]
     pub fn clear(&mut self) {
         self.attributes.clear();
     }

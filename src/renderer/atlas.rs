@@ -221,6 +221,7 @@ impl GlyphAtlas {
     }
 
     /// Clear the atlas and cache for font size change.
+    #[allow(dead_code)]
     pub fn clear(&mut self, ctx: &GpuContext) {
         self.cache.clear();
         self.current_row_x = 0;
@@ -270,7 +271,7 @@ mod tests {
     fn test_atlas_allocation_simple() {
         // Test allocation logic without GPU
         let mut current_row_x = 0u32;
-        let mut current_row_y = 0u32;
+        let current_row_y = 0u32;
         let mut current_row_height = 0u32;
         let size = 1024u32;
 
@@ -294,7 +295,7 @@ mod tests {
     #[test]
     fn test_to_rgba_rgb_conversion() {
         let rgb_data = vec![255, 128, 64];
-        let buffer = GlyphBuffer::Rgb(rgb_data);
+        let _buffer = GlyphBuffer::Rgb(rgb_data);
 
         // Manual conversion test
         let alpha = (255 + 128 + 64) / 3;

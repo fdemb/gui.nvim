@@ -20,7 +20,9 @@ pub const DEFAULT_ROWS: u64 = 24;
 
 pub struct NeovimProcess {
     pub neovim: Neovim<NvimWriter>,
+    #[allow(dead_code)]
     pub io_handle: JoinHandle<Result<(), Box<LoopError>>>,
+    #[allow(dead_code)]
     pub child: Child,
 }
 

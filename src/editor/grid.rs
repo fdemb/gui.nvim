@@ -7,6 +7,7 @@ use super::cell::Cell;
 #[derive(Debug, Clone)]
 pub struct Grid {
     /// Grid ID (1 is the main grid, others are for multigrid extension).
+    #[allow(dead_code)]
     pub id: u64,
     /// Number of columns.
     width: usize,
@@ -39,11 +40,13 @@ impl Grid {
     }
 
     /// Returns the total number of cells in the grid.
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.cells.len()
     }
 
     /// Returns true if the grid is empty.
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.cells.is_empty()
     }
@@ -60,6 +63,7 @@ impl Grid {
 
     /// Gets a mutable reference to the cell at (row, col).
     /// Returns None if coordinates are out of bounds.
+    #[allow(dead_code)]
     pub fn get_mut(&mut self, row: usize, col: usize) -> Option<&mut Cell> {
         if row < self.height && col < self.width {
             Some(&mut self.cells[row * self.width + col])
@@ -69,6 +73,7 @@ impl Grid {
     }
 
     /// Returns a slice of the cells in the given row.
+    #[allow(dead_code)]
     pub fn row(&self, row: usize) -> Option<&[Cell]> {
         if row < self.height {
             let start = row * self.width;
@@ -79,6 +84,7 @@ impl Grid {
     }
 
     /// Returns a mutable slice of the cells in the given row.
+    #[allow(dead_code)]
     pub fn row_mut(&mut self, row: usize) -> Option<&mut [Cell]> {
         if row < self.height {
             let start = row * self.width;
@@ -89,6 +95,7 @@ impl Grid {
     }
 
     /// Returns an iterator over all rows.
+    #[allow(dead_code)]
     pub fn rows(&self) -> impl Iterator<Item = &[Cell]> {
         self.cells.chunks(self.width)
     }

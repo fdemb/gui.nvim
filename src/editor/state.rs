@@ -2,7 +2,9 @@ use std::collections::HashMap;
 
 use super::dirty::DirtyTracker;
 use super::grid::Grid;
-use super::highlight::{Color, HighlightAttributes, HighlightMap, StyleFlags};
+#[cfg(test)]
+use super::highlight::StyleFlags;
+use super::highlight::{Color, HighlightAttributes, HighlightMap};
 
 /// Cursor shape as defined by Neovim's mode_info_set.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -55,7 +57,9 @@ pub struct EditorState {
     /// Dirty tracking for the main grid.
     dirty: DirtyTracker,
     /// Default grid dimensions (columns x rows).
+    #[allow(dead_code)]
     default_cols: usize,
+    #[allow(dead_code)]
     default_rows: usize,
 }
 
@@ -87,26 +91,31 @@ impl EditorState {
     }
 
     /// Returns a mutable reference to the main grid.
+    #[allow(dead_code)]
     pub fn main_grid_mut(&mut self) -> &mut Grid {
         self.grids.get_mut(&1).expect("main grid always exists")
     }
 
     /// Returns a grid by ID.
+    #[allow(dead_code)]
     pub fn grid(&self, id: u64) -> Option<&Grid> {
         self.grids.get(&id)
     }
 
     /// Returns a mutable reference to a grid by ID.
+    #[allow(dead_code)]
     pub fn grid_mut(&mut self, id: u64) -> Option<&mut Grid> {
         self.grids.get_mut(&id)
     }
 
     /// Returns the dirty tracker.
+    #[allow(dead_code)]
     pub fn dirty(&self) -> &DirtyTracker {
         &self.dirty
     }
 
     /// Returns a mutable reference to the dirty tracker.
+    #[allow(dead_code)]
     pub fn dirty_mut(&mut self) -> &mut DirtyTracker {
         &mut self.dirty
     }

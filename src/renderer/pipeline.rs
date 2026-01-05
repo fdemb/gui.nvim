@@ -104,7 +104,9 @@ impl QuadInstance {
     }
 }
 
+#[allow(dead_code)]
 pub const FLAG_TEXTURED: u32 = 1;
+#[allow(dead_code)]
 pub const FLAG_COLORED_GLYPH: u32 = 2;
 
 pub struct RenderPipeline {
@@ -262,6 +264,7 @@ impl RenderPipeline {
         );
     }
 
+    #[allow(dead_code)]
     pub fn update_cell_size(&mut self, ctx: &GpuContext, cell_width: f32, cell_height: f32) {
         self.uniforms.cell_size = [cell_width, cell_height];
         ctx.queue.write_buffer(
@@ -279,6 +282,7 @@ impl RenderPipeline {
         &self.uniform_bind_group
     }
 
+    #[allow(dead_code)]
     pub fn atlas_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
         &self.atlas_bind_group_layout
     }

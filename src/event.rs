@@ -8,6 +8,7 @@ use crate::bridge::ui::RedrawEvent;
 #[derive(Debug, Clone)]
 pub enum UserEvent {
     Neovim(NeovimEvent),
+    #[allow(dead_code)]
     GUI(GUIEvent),
 }
 
@@ -15,10 +16,12 @@ pub enum UserEvent {
 pub enum NeovimEvent {
     Redraw(Vec<RedrawEvent>),
     Flush,
+    #[allow(dead_code)]
     Quit,
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum GUIEvent {
     WindowCreated(Arc<Window>),
     Resized(PhysicalSize<u32>),

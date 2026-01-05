@@ -5,12 +5,13 @@ mod font;
 mod grid_renderer;
 mod pipeline;
 
-pub use atlas::*;
-pub use batch::*;
-pub use context::*;
-pub use font::*;
-pub use grid_renderer::*;
-pub use pipeline::*;
+// Re-export only what's needed by external code
+pub use context::{GpuContext, GpuContextError};
+pub use grid_renderer::GridRendererError;
+
+// Internal imports used by Renderer
+use grid_renderer::GridRenderer;
+use pipeline::RenderPipeline;
 
 use std::sync::Arc;
 use winit::dpi::PhysicalSize;

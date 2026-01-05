@@ -2,6 +2,5 @@ mod neovim;
 mod process;
 mod ui;
 
-pub use neovim::*;
-pub use process::*;
-pub use ui::*;
+pub use neovim::NeovimHandler;
+pub use process::{NeovimProcess, NvimWriter};

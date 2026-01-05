@@ -153,55 +153,41 @@ impl GridRenderer {
         fg: [f32; 4],
     ) {
         let underline_style = attrs.underline_style();
+        let has_strikethrough = attrs.has_strikethrough();
 
-        if underline_style != UnderlineStyle::None {
-            let underline_pos = self.font_system.underline_position();
-            let underline_thickness = self.font_system.underline_thickness();
-            let baseline_y = y + self.cell_height - self.font_system.descent().abs();
-            let underline_y = baseline_y - underline_pos;
-
-            match underline_style {
-                UnderlineStyle::Single
-                | UnderlineStyle::Curl
-                | UnderlineStyle::Dotted
-                | UnderlineStyle::Dashed => {
-                    self.batcher.push_decoration(
-                        x,
-                        underline_y,
-                        self.cell_width,
-                        underline_thickness,
-                        special_color,
-                    );
-                }
-                UnderlineStyle::Double => {
-                    let gap = underline_thickness;
-                    self.batcher.push_decoration(
-                        x,
-                        underline_y - gap,
-                        self.cell_width,
-                        underline_thickness,
-                        special_color,
-                    );
-                    self.batcher.push_decoration(
-                        x,
-                        underline_y + gap,
-                        self.cell_width,
-                        underline_thickness,
-                        special_color,
-                    );
-                }
-                UnderlineStyle::None => {}
-            }
+        if underline_style == UnderlineStyle::None && !has_strikethrough {
+            return;
         }
 
-        if attrs.has_strikethrough() {
-            let strikeout_pos = self.font_system.strikeout_position();
-            let strikeout_thickness = self.font_system.strikeout_thickness();
-            let baseline_y = y + self.cell_height - self.font_system.descent().abs();
-            let strikeout_y = baseline_y - strikeout_pos;
+        let geom = compute_decoration_geometry(
+            x,
+            y,
+            self.cell_width,
+            self.cell_height,
+            self.font_system.descent(),
+            self.font_system.underline_position(),
+            self.font_system.underline_thickness(),
+            self.font_system.strikeout_position(),
+            self.font_system.strikeout_thickness(),
+            underline_style,
+            has_strikethrough,
+        );
 
+        // Underlines use special_color, strikethrough uses fg
+        let underline_count = match underline_style {
+            UnderlineStyle::None => 0,
+            UnderlineStyle::Double => 2,
+            _ => 1,
+        };
+
+        for (i, line) in geom.lines.iter().enumerate() {
+            let color = if i < underline_count {
+                special_color
+            } else {
+                fg
+            };
             self.batcher
-                .push_decoration(x, strikeout_y, self.cell_width, strikeout_thickness, fg);
+                .push_decoration(line.x, line.y, line.width, line.height, color);
         }
     }
 
@@ -250,8 +236,14 @@ impl GridRenderer {
             return;
         }
 
-        let x = cursor.col as f32 * self.cell_width;
-        let y = cursor.row as f32 * self.cell_height;
+        let geom = compute_cursor_geometry(
+            mode.cursor_shape,
+            cursor.row,
+            cursor.col,
+            self.cell_width,
+            self.cell_height,
+            mode.cell_percentage,
+        );
 
         let cursor_color = if mode.attr_id > 0 {
             if let Some(fg) = state.highlights.get(mode.attr_id).foreground {
@@ -263,95 +255,70 @@ impl GridRenderer {
             default_fg
         };
 
-        let cell = grid.get(cursor.row, cursor.col);
-        let cell_attrs = cell.map(|c| state.highlights.get(c.highlight_id));
+        self.batcher
+            .push_background(geom.x, geom.y, geom.width, geom.height, cursor_color);
 
-        let percentage = if mode.cell_percentage > 0 {
-            mode.cell_percentage.min(100) as f32 / 100.0
-        } else {
-            match mode.cursor_shape {
-                CursorShape::Vertical => 0.25,
-                CursorShape::Horizontal => 0.25,
-                CursorShape::Block => 1.0,
-            }
-        };
+        // Block cursor: render character with inverted colors
+        if mode.cursor_shape == CursorShape::Block {
+            let cell = grid.get(cursor.row, cursor.col);
+            let cell_attrs = cell.map(|c| state.highlights.get(c.highlight_id));
 
-        match mode.cursor_shape {
-            CursorShape::Block => {
-                self.batcher
-                    .push_background(x, y, self.cell_width, self.cell_height, cursor_color);
+            if let Some(c) = cell {
+                if !c.is_empty() && !c.is_wide_spacer() {
+                    if let Some(character) = c.text.chars().next() {
+                        let text_color = cell_attrs
+                            .and_then(|a| a.background)
+                            .map(|c| u32_to_linear_rgba(c.0 >> 8))
+                            .unwrap_or(default_bg);
 
-                if let Some(c) = cell {
-                    if !c.is_empty() && !c.is_wide_spacer() {
-                        if let Some(character) = c.text.chars().next() {
-                            let text_color = cell_attrs
-                                .and_then(|a| a.background)
-                                .map(|c| u32_to_linear_rgba(c.0 >> 8))
-                                .unwrap_or(default_bg);
+                        let attrs = cell_attrs.unwrap_or_else(|| state.highlights.get(0));
+                        let font_key = self.font_system.font_key_for_style(
+                            attrs.style.contains(StyleFlags::BOLD),
+                            attrs.style.contains(StyleFlags::ITALIC),
+                        );
 
-                            let attrs = cell_attrs.unwrap_or_else(|| state.highlights.get(0));
-                            let font_key = self.font_system.font_key_for_style(
-                                attrs.style.contains(StyleFlags::BOLD),
-                                attrs.style.contains(StyleFlags::ITALIC),
-                            );
+                        if let Some(cached) = self.atlas.get_glyph(
+                            ctx,
+                            &mut self.font_system,
+                            character,
+                            font_key,
+                            self.font_size,
+                        ) {
+                            if cached.width > 0 && cached.height > 0 {
+                                let atlas_size = self.atlas.atlas_size() as f32;
+                                let uv_x = cached.atlas_x as f32 / atlas_size;
+                                let uv_y = cached.atlas_y as f32 / atlas_size;
+                                let uv_w = cached.width as f32 / atlas_size;
+                                let uv_h = cached.height as f32 / atlas_size;
 
-                            if let Some(cached) = self.atlas.get_glyph(
-                                ctx,
-                                &mut self.font_system,
-                                character,
-                                font_key,
-                                self.font_size,
-                            ) {
-                                if cached.width > 0 && cached.height > 0 {
-                                    let atlas_size = self.atlas.atlas_size() as f32;
-                                    let uv_x = cached.atlas_x as f32 / atlas_size;
-                                    let uv_y = cached.atlas_y as f32 / atlas_size;
-                                    let uv_w = cached.width as f32 / atlas_size;
-                                    let uv_h = cached.height as f32 / atlas_size;
+                                let glyph_x = geom.x + cached.bearing_x as f32;
+                                let glyph_y = geom.y
+                                    + (self.cell_height
+                                        - self.font_system.descent().abs()
+                                        - cached.bearing_y as f32);
 
-                                    let glyph_x = x + cached.bearing_x as f32;
-                                    let glyph_y = y
-                                        + (self.cell_height
-                                            - self.font_system.descent().abs()
-                                            - cached.bearing_y as f32);
-
-                                    self.batcher.push_glyph(
-                                        glyph_x,
-                                        glyph_y,
-                                        cached.width as f32,
-                                        cached.height as f32,
-                                        uv_x,
-                                        uv_y,
-                                        uv_w,
-                                        uv_h,
-                                        text_color,
-                                        cached.is_colored,
-                                    );
-                                }
+                                self.batcher.push_glyph(
+                                    glyph_x,
+                                    glyph_y,
+                                    cached.width as f32,
+                                    cached.height as f32,
+                                    uv_x,
+                                    uv_y,
+                                    uv_w,
+                                    uv_h,
+                                    text_color,
+                                    cached.is_colored,
+                                );
                             }
                         }
                     }
                 }
-            }
-
-            CursorShape::Vertical => {
-                let bar_width = (self.cell_width * percentage).max(1.0);
-                self.batcher
-                    .push_background(x, y, bar_width, self.cell_height, cursor_color);
-            }
-
-            CursorShape::Horizontal => {
-                let bar_height = (self.cell_height * percentage).max(1.0);
-                let bar_y = y + self.cell_height - bar_height;
-                self.batcher
-                    .push_background(x, bar_y, self.cell_width, bar_height, cursor_color);
             }
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-#[allow(dead_code)]
 pub struct CursorGeometry {
     pub x: f32,
     pub y: f32,
@@ -360,13 +327,11 @@ pub struct CursorGeometry {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-#[allow(dead_code)]
 pub struct DecorationGeometry {
     pub lines: Vec<DecorationLine>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-#[allow(dead_code)]
 pub struct DecorationLine {
     pub x: f32,
     pub y: f32,
@@ -374,7 +339,6 @@ pub struct DecorationLine {
     pub height: f32,
 }
 
-#[allow(dead_code)]
 pub fn compute_decoration_geometry(
     x: f32,
     y: f32,
@@ -438,7 +402,6 @@ pub fn compute_decoration_geometry(
     DecorationGeometry { lines }
 }
 
-#[allow(dead_code)]
 pub fn compute_cursor_geometry(
     cursor_shape: CursorShape,
     row: usize,

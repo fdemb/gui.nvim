@@ -30,7 +30,7 @@ fn main() {
                             println!("Captured {} environment variables to:", count);
                             println!("  {}", path.display());
                             println!();
-                            println!("These will be loaded automatically when gui-nvim starts.");
+                            println!("These will be loaded automatically when gui.nvim starts.");
                             println!(
                                 "Re-run this command after changing your shell configuration."
                             );
@@ -48,7 +48,7 @@ fn main() {
                 std::process::exit(0);
             }
             "--version" | "-V" => {
-                println!("gui-nvim {}", env!("CARGO_PKG_VERSION"));
+                println!("gui.nvim {}", env!("CARGO_PKG_VERSION"));
                 std::process::exit(0);
             }
             arg => {
@@ -83,11 +83,11 @@ fn main() {
 }
 
 fn print_help() {
-    println!("gui-nvim {}", env!("CARGO_PKG_VERSION"));
+    println!("gui.nvim {}", env!("CARGO_PKG_VERSION"));
     println!("GPU-accelerated Neovim GUI");
     println!();
     println!("USAGE:");
-    println!("    gui-nvim [COMMAND]");
+    println!("    gui.nvim [COMMAND]");
     println!();
     println!("COMMANDS:");
     println!("    env         Capture shell environment variables for GUI launches");
@@ -98,7 +98,7 @@ fn print_help() {
     println!("    -V, --version   Print version information");
     println!();
     println!("ENVIRONMENT CAPTURE:");
-    println!("    Run `gui-nvim env` from your terminal to capture environment variables.");
+    println!("    Run `gui.nvim env` from your terminal to capture environment variables.");
     println!("    This is useful when launching from Finder/Spotlight on macOS, where");
     println!("    GUI apps don't inherit your shell's PATH and other variables.");
     println!();

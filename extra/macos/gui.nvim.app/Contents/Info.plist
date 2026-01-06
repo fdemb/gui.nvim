@@ -11,7 +11,7 @@
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
-  <string>GuiNvim</string>
+  <string>gui.nvim</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
@@ -29,7 +29,7 @@
   <key>NSSupportsAutomaticGraphicsSwitching</key>
   <true/>
   <key>CFBundleDisplayName</key>
-  <string>GuiNvim</string>
+  <string>gui.nvim</string>
   <key>NSRequiresAquaSystemAppearance</key>
   <string>NO</string>
   <key>LSMinimumSystemVersion</key>

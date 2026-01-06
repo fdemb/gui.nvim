@@ -3,14 +3,14 @@ TARGET = gui-nvim
 ASSETS_DIR = extra
 RELEASE_DIR = target/release
 
-APP_NAME = GuiNvim.app
+APP_NAME = gui.nvim.app
 APP_TEMPLATE = $(ASSETS_DIR)/macos/$(APP_NAME)
 APP_DIR = $(RELEASE_DIR)/macos
 APP_BINARY = $(RELEASE_DIR)/$(TARGET)
 APP_BINARY_DIR = $(APP_DIR)/$(APP_NAME)/Contents/MacOS
 APP_RESOURCES_DIR = $(APP_DIR)/$(APP_NAME)/Contents/Resources
 
-DMG_NAME = GuiNvim.dmg
+DMG_NAME = gui.nvim.dmg
 DMG_DIR = $(RELEASE_DIR)/macos
 
 # Minimum macOS version (11.0 = Big Sur, required for wgpu/Metal)
@@ -36,8 +36,8 @@ $(TARGET)-universal:
 	MACOSX_DEPLOYMENT_TARGET="$(MACOSX_DEPLOYMENT_TARGET)" cargo build --release --target=aarch64-apple-darwin
 	@lipo target/{x86_64,aarch64}-apple-darwin/release/$(TARGET) -create -output $(APP_BINARY)
 
-app: $(APP_NAME)-native ## Create a GuiNvim.app
-app-universal: $(APP_NAME)-universal ## Create a universal GuiNvim.app
+app: $(APP_NAME)-native ## Create a gui.nvim.app
+app-universal: $(APP_NAME)-universal ## Create a universal gui.nvim.app
 
 $(APP_NAME)-%: $(TARGET)-%
 	@mkdir -p "$(APP_BINARY_DIR)"
@@ -49,14 +49,14 @@ $(APP_NAME)-%: $(TARGET)-%
 	@codesign --force --deep --sign - "$(APP_DIR)/$(APP_NAME)"
 	@echo "Created '$(APP_NAME)' in '$(APP_DIR)'"
 
-dmg: $(DMG_NAME)-native ## Create a GuiNvim.dmg
-dmg-universal: $(DMG_NAME)-universal ## Create a universal GuiNvim.dmg
+dmg: $(DMG_NAME)-native ## Create a gui.nvim.dmg
+dmg-universal: $(DMG_NAME)-universal ## Create a universal gui.nvim.dmg
 
 $(DMG_NAME)-%: $(APP_NAME)-%
 	@echo "Packing disk image..."
 	@ln -sf /Applications $(DMG_DIR)/Applications
 	@hdiutil create $(DMG_DIR)/$(DMG_NAME) \
-		-volname "GuiNvim" \
+		-volname "gui.nvim" \
 		-fs HFS+ \
 		-srcfolder $(APP_DIR) \
 		-ov -format UDZO

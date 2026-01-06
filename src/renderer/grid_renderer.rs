@@ -78,15 +78,16 @@ impl GridRenderer {
         let grid = state.main_grid();
         let highlights = &state.highlights;
 
-        let mut last_hl_id = u64::MAX;
-        let mut last_bg = default_bg;
-        let mut last_fg = default_fg;
-        let mut last_attrs = highlights.get(0);
-
         for (row_idx, row_cells) in grid.rows().enumerate() {
             let y = row_idx as f32 * self.cell_height;
 
+            let mut last_hl_id = u64::MAX;
+            let mut last_bg = default_bg;
+            let mut last_fg = default_fg;
+            let mut last_attrs = highlights.get(0);
+
             for (col_idx, cell) in row_cells.iter().enumerate() {
+                // Cache color resolution
                 if cell.highlight_id != last_hl_id {
                     last_hl_id = cell.highlight_id;
                     last_attrs = highlights.get(last_hl_id);

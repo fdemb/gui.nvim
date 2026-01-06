@@ -5,7 +5,9 @@ use super::batch::RenderBatcher;
 use super::color::u32_to_linear_rgba;
 use super::font::FontSystem;
 use super::GpuContext;
-use crate::editor::{CursorShape, EditorState, StyleFlags, UnderlineStyle};
+use crate::editor::{
+    Cell, CursorShape, EditorState, HighlightAttributes, StyleFlags, UnderlineStyle,
+};
 
 pub struct GridRenderer {
     batcher: RenderBatcher,
@@ -76,81 +78,99 @@ impl GridRenderer {
         let grid = state.main_grid();
         let highlights = &state.highlights;
 
-        for row in 0..grid.height() {
-            let y = row as f32 * self.cell_height;
+        let mut last_hl_id = u64::MAX;
+        let mut last_bg = default_bg;
+        let mut last_fg = default_fg;
+        let mut last_attrs = highlights.get(0);
 
-            for col in 0..grid.width() {
-                if let Some(cell) = grid.get(row, col) {
-                    let x = col as f32 * self.cell_width;
+        for (row_idx, row_cells) in grid.rows().enumerate() {
+            let y = row_idx as f32 * self.cell_height;
 
-                    let attrs = highlights.get(cell.highlight_id);
-                    let (bg, fg) = self.resolve_colors(attrs, default_bg, default_fg);
+            for (col_idx, cell) in row_cells.iter().enumerate() {
+                if cell.highlight_id != last_hl_id {
+                    last_hl_id = cell.highlight_id;
+                    last_attrs = highlights.get(last_hl_id);
+                    let (bg, fg) = self.resolve_colors(last_attrs, default_bg, default_fg);
+                    last_bg = bg;
+                    last_fg = fg;
+                }
 
-                    // Background
-                    if bg != default_bg {
-                        self.batcher
-                            .push_background(x, y, self.cell_width, self.cell_height, bg);
-                    }
+                let x = col_idx as f32 * self.cell_width;
 
-                    // Glyph
-                    if !cell.is_empty() && !cell.is_wide_spacer() {
-                        if let Some(character) = cell.text.chars().next() {
-                            let font_key = self.font_system.font_key_for_style(
-                                attrs.style.contains(StyleFlags::BOLD),
-                                attrs.style.contains(StyleFlags::ITALIC),
-                            );
+                self.push_cell_background(x, y, last_bg, default_bg);
+                self.push_cell_glyph(ctx, x, y, cell, last_attrs, last_fg);
+                self.push_cell_decorations(x, y, last_attrs, last_fg);
+            }
+        }
+    }
 
-                            if let Some(cached) = self.atlas.get_glyph(
-                                ctx,
-                                &mut self.font_system,
-                                character,
-                                font_key,
-                                self.font_size,
-                            ) {
-                                if cached.width > 0 && cached.height > 0 {
-                                    let atlas_size = self.atlas.atlas_size() as f32;
-                                    let uv_x = cached.atlas_x as f32 / atlas_size;
-                                    let uv_y = cached.atlas_y as f32 / atlas_size;
-                                    let uv_w = cached.width as f32 / atlas_size;
-                                    let uv_h = cached.height as f32 / atlas_size;
+    #[inline(always)]
+    fn push_cell_background(&mut self, x: f32, y: f32, bg: [f32; 4], default_bg: [f32; 4]) {
+        if bg != default_bg {
+            self.batcher
+                .push_background(x, y, self.cell_width, self.cell_height, bg);
+        }
+    }
 
-                                    let glyph_x = x + cached.bearing_x as f32;
-                                    let glyph_y = y
-                                        + (self.cell_height
-                                            - self.font_system.descent().abs()
-                                            - cached.bearing_y as f32);
+    #[inline(always)]
+    fn push_cell_glyph(
+        &mut self,
+        ctx: &GpuContext,
+        x: f32,
+        y: f32,
+        cell: &Cell,
+        attrs: &HighlightAttributes,
+        fg: [f32; 4],
+    ) {
+        if cell.is_empty() || cell.is_wide_spacer() {
+            return;
+        }
 
-                                    self.batcher.push_glyph(
-                                        glyph_x,
-                                        glyph_y,
-                                        cached.width as f32,
-                                        cached.height as f32,
-                                        uv_x,
-                                        uv_y,
-                                        uv_w,
-                                        uv_h,
-                                        fg,
-                                        cached.is_colored,
-                                    );
-                                }
-                            }
-                        }
-                    }
+        if let Some(character) = cell.text.chars().next() {
+            let font_key = self.font_system.font_key_for_style(
+                attrs.style.contains(StyleFlags::BOLD),
+                attrs.style.contains(StyleFlags::ITALIC),
+            );
 
-                    // Decorations
-                    self.push_decorations(x, y, attrs, fg);
+            if let Some(cached) = self.atlas.get_glyph(
+                ctx,
+                &mut self.font_system,
+                character,
+                font_key,
+                self.font_size,
+            ) {
+                if cached.width > 0 && cached.height > 0 {
+                    let atlas_size = self.atlas.atlas_size() as f32;
+                    let uv_x = cached.atlas_x as f32 / atlas_size;
+                    let uv_y = cached.atlas_y as f32 / atlas_size;
+                    let uv_w = cached.width as f32 / atlas_size;
+                    let uv_h = cached.height as f32 / atlas_size;
+
+                    let glyph_x = x + cached.bearing_x as f32;
+                    let glyph_y = y
+                        + (self.cell_height
+                            - self.font_system.descent().abs()
+                            - cached.bearing_y as f32);
+
+                    self.batcher.push_glyph(
+                        glyph_x,
+                        glyph_y,
+                        cached.width as f32,
+                        cached.height as f32,
+                        uv_x,
+                        uv_y,
+                        uv_w,
+                        uv_h,
+                        fg,
+                        cached.is_colored,
+                    );
                 }
             }
         }
     }
 
-    fn push_decorations(
-        &mut self,
-        x: f32,
-        y: f32,
-        attrs: &crate::editor::HighlightAttributes,
-        fg: [f32; 4],
-    ) {
+    #[inline(always)]
+    fn push_cell_decorations(&mut self, x: f32, y: f32, attrs: &HighlightAttributes, fg: [f32; 4]) {
         let underline_style = attrs.underline_style();
         let has_strikethrough = attrs.has_strikethrough();
 
@@ -177,7 +197,6 @@ impl GridRenderer {
             has_strikethrough,
         );
 
-        // Underlines use special_color, strikethrough uses fg
         let underline_count = match underline_style {
             UnderlineStyle::None => 0,
             UnderlineStyle::Double => 2,
@@ -195,9 +214,10 @@ impl GridRenderer {
         }
     }
 
+    #[inline(always)]
     fn resolve_colors(
         &self,
-        attrs: &crate::editor::HighlightAttributes,
+        attrs: &HighlightAttributes,
         default_bg: [f32; 4],
         default_fg: [f32; 4],
     ) -> ([f32; 4], [f32; 4]) {
@@ -234,7 +254,6 @@ impl GridRenderer {
         }
 
         // Only draw cursor on the main grid (ID 1).
-        // When floating windows are open, the cursor moves to their grid.
         if cursor.grid != 1 {
             return;
         }
@@ -274,54 +293,17 @@ impl GridRenderer {
             let cell_attrs = cell.map(|c| state.highlights.get(c.highlight_id));
 
             if let Some(c) = cell {
+                // Reuse existing push_cell_glyph logic but force colors
+                // We manually construct a "fake" inverted style
                 if !c.is_empty() && !c.is_wide_spacer() {
-                    if let Some(character) = c.text.chars().next() {
-                        let text_color = cell_attrs
-                            .and_then(|a| a.background)
-                            .map(|c| u32_to_linear_rgba(c.0 >> 8))
-                            .unwrap_or(default_bg);
+                    let text_color = cell_attrs
+                        .and_then(|a| a.background)
+                        .map(|c| u32_to_linear_rgba(c.0 >> 8))
+                        .unwrap_or(default_bg);
 
-                        let attrs = cell_attrs.unwrap_or_else(|| state.highlights.get(0));
-                        let font_key = self.font_system.font_key_for_style(
-                            attrs.style.contains(StyleFlags::BOLD),
-                            attrs.style.contains(StyleFlags::ITALIC),
-                        );
+                    let attrs = cell_attrs.unwrap_or_else(|| state.highlights.get(0));
 
-                        if let Some(cached) = self.atlas.get_glyph(
-                            ctx,
-                            &mut self.font_system,
-                            character,
-                            font_key,
-                            self.font_size,
-                        ) {
-                            if cached.width > 0 && cached.height > 0 {
-                                let atlas_size = self.atlas.atlas_size() as f32;
-                                let uv_x = cached.atlas_x as f32 / atlas_size;
-                                let uv_y = cached.atlas_y as f32 / atlas_size;
-                                let uv_w = cached.width as f32 / atlas_size;
-                                let uv_h = cached.height as f32 / atlas_size;
-
-                                let glyph_x = geom.x + cached.bearing_x as f32;
-                                let glyph_y = geom.y
-                                    + (self.cell_height
-                                        - self.font_system.descent().abs()
-                                        - cached.bearing_y as f32);
-
-                                self.batcher.push_glyph(
-                                    glyph_x,
-                                    glyph_y,
-                                    cached.width as f32,
-                                    cached.height as f32,
-                                    uv_x,
-                                    uv_y,
-                                    uv_w,
-                                    uv_h,
-                                    text_color,
-                                    cached.is_colored,
-                                );
-                            }
-                        }
-                    }
+                    self.push_cell_glyph(ctx, geom.x, geom.y, c, attrs, text_color);
                 }
             }
         }

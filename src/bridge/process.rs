@@ -1,5 +1,6 @@
 use std::env;
 use std::io;
+use std::path::PathBuf;
 use std::process::Stdio;
 
 use nvim_rs::compat::tokio::Compat;
@@ -30,6 +31,12 @@ impl NeovimProcess {
     pub async fn spawn(event_proxy: EventLoopProxy<UserEvent>) -> io::Result<Self> {
         let nvim_path = find_nvim_path()?;
         let handler = NeovimHandler::new(event_proxy);
+
+        let current_dir = env::current_dir()?;
+        if current_dir == PathBuf::from("/") {
+            log::warn!("Current directory is root. This is probably not what you want. Changing to home directory.");
+            env::set_current_dir(env::home_dir().expect("Could not find home directory"))?;
+        }
 
         let mut cmd = Command::new(&nvim_path);
         cmd.arg("--embed")

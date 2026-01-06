@@ -40,14 +40,13 @@ impl Default for FontConfig {
 
 /// Platform-specific default font family.
 fn default_font_family() -> String {
-    return "Iosevka".to_string();
-    // if cfg!(target_os = "macos") {
-    //     "Menlo".to_string()
-    // } else if cfg!(windows) {
-    //     "Consolas".to_string()
-    // } else {
-    //     "monospace".to_string()
-    // }
+    if cfg!(target_os = "macos") {
+        "Menlo".to_string()
+    } else if cfg!(windows) {
+        "Consolas".to_string()
+    } else {
+        "monospace".to_string()
+    }
 }
 
 /// Rasterized glyph with positioning data.

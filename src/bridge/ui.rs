@@ -186,6 +186,12 @@ fn parse_grid_line(args: &[Value]) -> Option<RedrawEvent> {
                 1
             };
 
+            // Cells with repeat == 0 should be skipped. They are used by terminal Neovim
+            // to distinguish between empty lines and lines ending with spaces.
+            if repeat == 0 {
+                continue;
+            }
+
             cells.push(GridCell {
                 text,
                 hl_id,

@@ -233,6 +233,12 @@ impl GridRenderer {
             return;
         }
 
+        // Only draw cursor on the main grid (ID 1).
+        // When floating windows are open, the cursor moves to their grid.
+        if cursor.grid != 1 {
+            return;
+        }
+
         let mode = state.current_mode();
         let grid = state.main_grid();
 

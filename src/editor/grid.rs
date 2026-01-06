@@ -169,7 +169,7 @@ impl Grid {
                     cell.set_wide(false);
                 } else {
                     cell.text.clone_from(text);
-                    cell.set_wide_spacer(false);
+                    cell.flags = super::cell::CellFlags::empty();
                 }
                 cell.highlight_id = hl_id;
                 col += 1;
@@ -427,5 +427,43 @@ mod tests {
         assert_eq!(rows.len(), 2);
         assert_eq!(rows[0].len(), 3);
         assert_eq!(rows[1].len(), 3);
+    }
+
+    #[test]
+    fn test_grid_update_line_clears_flags() {
+        let mut grid = Grid::new(1, 10, 5);
+
+        // First, simulate a wide spacer being set
+        grid[(0, 1)].set_wide_spacer(true);
+        assert!(grid[(0, 1)].is_wide_spacer());
+        assert!(!grid[(0, 1)].is_empty()); // Spacer flag means not empty
+
+        // Now update the line with regular text
+        let cells = vec![("x".into(), Some(1), 1)];
+        grid.update_line(0, 1, &cells);
+
+        // After update, flags should be cleared
+        assert!(!grid[(0, 1)].is_wide_spacer());
+        assert_eq!(grid[(0, 1)].text, "x");
+        // Cell with text "x" and hl_id 1 should not be empty
+        assert!(!grid[(0, 1)].is_empty());
+    }
+
+    #[test]
+    fn test_grid_update_line_space_with_cleared_flags() {
+        let mut grid = Grid::new(1, 10, 5);
+
+        // Set wide spacer flag
+        grid[(0, 0)].set_wide_spacer(true);
+        assert!(grid[(0, 0)].is_wide_spacer());
+
+        // Update with a space and default highlight
+        let cells = vec![(" ".into(), Some(0), 1)];
+        grid.update_line(0, 0, &cells);
+
+        // After update, cell should be empty (space with hl_id 0 and no flags)
+        assert!(!grid[(0, 0)].is_wide_spacer());
+        assert_eq!(grid[(0, 0)].text, " ");
+        assert!(grid[(0, 0)].is_empty());
     }
 }

@@ -30,7 +30,7 @@ struct InstanceInput {
     @location(2) uv_offset: vec2<f32>,
     // UV size in atlas, zero for solid color
     @location(3) uv_size: vec2<f32>,
-    // RGBA color (premultiplied alpha for backgrounds, text color for glyphs)
+    // RGBA color (all outputs use premultiplied alpha blending)
     @location(4) color: vec4<f32>,
     // Flags: bit 0 = is_textured (use atlas alpha), bit 1 = is_colored_glyph
     @location(5) flags: u32,

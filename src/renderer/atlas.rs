@@ -89,14 +89,18 @@ impl GlyphAtlas {
             size: font_size,
         };
 
-        if let Some(cached) = self.cache.get(&key) {
-            return Some(*cached);
+        // Check cache first - returns Some(Some(glyph)), Some(None) for cached failure, or None if not cached
+        if let Some(cached_result) = self.cache.get(&key) {
+            return cached_result.copied();
         }
 
+        // Not in cache - try to rasterize
         let rasterized = match font_system.rasterize(character, font_key) {
             Ok(g) => g,
             Err(e) => {
                 log::warn!("Failed to rasterize '{}': {}", character, e);
+                // Cache the failure so we don't try again
+                self.cache.insert(key, None);
                 return None;
             }
         };
@@ -111,7 +115,7 @@ impl GlyphAtlas {
                 bearing_y: rasterized.bearing_y,
                 is_colored: rasterized.buffer.is_colored(),
             };
-            self.cache.insert(key, cached);
+            self.cache.insert(key, Some(cached));
             return Some(cached);
         }
 
@@ -128,7 +132,7 @@ impl GlyphAtlas {
             is_colored: rasterized.buffer.is_colored(),
         };
 
-        self.cache.insert(key, cached);
+        self.cache.insert(key, Some(cached));
         Some(cached)
     }
 

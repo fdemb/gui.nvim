@@ -40,13 +40,14 @@ impl Default for FontConfig {
 
 /// Platform-specific default font family.
 fn default_font_family() -> String {
-    if cfg!(target_os = "macos") {
-        "Menlo".to_string()
-    } else if cfg!(windows) {
-        "Consolas".to_string()
-    } else {
-        "monospace".to_string()
-    }
+    return "Iosevka".to_string();
+    // if cfg!(target_os = "macos") {
+    //     "Menlo".to_string()
+    // } else if cfg!(windows) {
+    //     "Consolas".to_string()
+    // } else {
+    //     "monospace".to_string()
+    // }
 }
 
 /// Rasterized glyph with positioning data.
@@ -264,8 +265,9 @@ pub struct CachedGlyph {
 }
 
 /// Glyph cache keyed by character and font style.
+/// Stores `Some(glyph)` for successful rasterizations, `None` for failed ones.
 pub struct GlyphCache {
-    cache: HashMap<GlyphKey, CachedGlyph, RandomState>,
+    cache: HashMap<GlyphKey, Option<CachedGlyph>, RandomState>,
 }
 
 impl GlyphCache {
@@ -275,11 +277,13 @@ impl GlyphCache {
         }
     }
 
-    pub fn get(&self, key: &GlyphKey) -> Option<&CachedGlyph> {
-        self.cache.get(key)
+    /// Returns `Some(Some(glyph))` if cached successfully, `Some(None)` if cached as failed,
+    /// or `None` if not in cache at all.
+    pub fn get(&self, key: &GlyphKey) -> Option<Option<&CachedGlyph>> {
+        self.cache.get(key).map(|opt| opt.as_ref())
     }
 
-    pub fn insert(&mut self, key: GlyphKey, glyph: CachedGlyph) {
+    pub fn insert(&mut self, key: GlyphKey, glyph: Option<CachedGlyph>) {
         self.cache.insert(key, glyph);
     }
 
@@ -374,11 +378,30 @@ mod tests {
             is_colored: false,
         };
 
-        cache.insert(key, glyph);
+        cache.insert(key, Some(glyph));
         assert!(cache.get(&key).is_some());
+        assert!(cache.get(&key).unwrap().is_some());
 
         cache.clear();
         assert!(cache.get(&key).is_none());
+    }
+
+    #[test]
+    fn test_glyph_cache_failure() {
+        let mut cache = GlyphCache::new();
+        let key = GlyphKey {
+            font_key: FontKey::next(), // Generate a unique key
+            character: '\u{f4d2}',     // A Nerd Font glyph that may not exist
+            size: Size::new(14.0),
+        };
+
+        // Insert a cached failure (None)
+        cache.insert(key, None);
+
+        // Should return Some(None) - meaning "in cache, but failed"
+        let result = cache.get(&key);
+        assert!(result.is_some()); // It's in the cache
+        assert!(result.unwrap().is_none()); // But marked as failed
     }
 
     #[test]

@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use super::dirty::DirtyTracker;
 use super::grid::Grid;
 #[cfg(test)]
 use super::highlight::StyleFlags;
@@ -41,7 +40,6 @@ pub struct Cursor {
 /// - Grids: The 2D character grids (main grid and floating windows)
 /// - Highlights: Color and style definitions from hl_attr_define
 /// - Cursor: Position and mode information
-/// - Dirty tracking: Which regions need re-rendering
 #[derive(Debug)]
 pub struct EditorState {
     /// All active grids (main grid is ID 1).
@@ -54,8 +52,6 @@ pub struct EditorState {
     modes: Vec<ModeInfo>,
     /// Current mode index.
     current_mode: usize,
-    /// Dirty tracking for the main grid.
-    dirty: DirtyTracker,
     /// Default grid dimensions (columns x rows).
     #[allow(dead_code)]
     default_cols: usize,
@@ -79,7 +75,6 @@ impl EditorState {
             },
             modes: vec![ModeInfo::default()],
             current_mode: 0,
-            dirty: DirtyTracker::new(rows),
             default_cols: cols,
             default_rows: rows,
         }
@@ -108,17 +103,6 @@ impl EditorState {
         self.grids.get_mut(&id)
     }
 
-    /// Returns the dirty tracker.
-    pub fn dirty(&self) -> &DirtyTracker {
-        &self.dirty
-    }
-
-    /// Returns a mutable reference to the dirty tracker.
-    #[allow(dead_code)]
-    pub fn dirty_mut(&mut self) -> &mut DirtyTracker {
-        &mut self.dirty
-    }
-
     /// Returns the current mode info.
     pub fn current_mode(&self) -> &ModeInfo {
         self.modes.get(self.current_mode).unwrap_or(&self.modes[0])
@@ -132,19 +116,12 @@ impl EditorState {
             self.grids
                 .insert(grid_id, Grid::new(grid_id, width, height));
         }
-
-        if grid_id == 1 {
-            self.dirty.resize(height);
-        }
     }
 
     /// Handles a grid_clear event.
     pub fn grid_clear(&mut self, grid_id: u64) {
         if let Some(grid) = self.grids.get_mut(&grid_id) {
             grid.clear();
-            if grid_id == 1 {
-                self.dirty.mark_all();
-            }
         }
     }
 
@@ -158,9 +135,6 @@ impl EditorState {
     ) {
         if let Some(grid) = self.grids.get_mut(&grid_id) {
             grid.update_line(row, col_start, cells);
-            if grid_id == 1 {
-                self.dirty.mark_row(row);
-            }
         }
     }
 
@@ -176,23 +150,14 @@ impl EditorState {
     ) {
         if let Some(grid) = self.grids.get_mut(&grid_id) {
             grid.scroll(top, bot, left, right, rows);
-            if grid_id == 1 {
-                self.dirty.mark_rows(top, bot);
-            }
         }
     }
 
     /// Handles a grid_cursor_goto event.
     pub fn grid_cursor_goto(&mut self, grid_id: u64, row: usize, col: usize) {
-        if self.cursor.grid == 1 {
-            self.dirty.mark_row(self.cursor.row);
-        }
         self.cursor.grid = grid_id;
         self.cursor.row = row;
         self.cursor.col = col;
-        if grid_id == 1 {
-            self.dirty.mark_row(row);
-        }
     }
 
     /// Handles a hl_attr_define event.
@@ -207,7 +172,6 @@ impl EditorState {
             Color::from_u24(bg),
             Color::from_u24(sp),
         );
-        self.dirty.mark_all();
     }
 
     /// Handles a mode_info_set event.
@@ -221,17 +185,11 @@ impl EditorState {
     /// Handles a mode_change event.
     pub fn mode_change(&mut self, _mode: &str, mode_idx: usize) {
         self.current_mode = mode_idx;
-        self.dirty.mark_row(self.cursor.row);
     }
 
     /// Handles a flush event (marks end of a batch of updates).
     pub fn flush(&mut self) {
         // Currently a no-op, but could trigger a render request
-    }
-
-    /// Clears all dirty flags after rendering.
-    pub fn clear_dirty(&mut self) {
-        self.dirty.clear();
     }
 }
 
@@ -250,43 +208,35 @@ mod tests {
         let state = EditorState::new(80, 24);
         assert_eq!(state.main_grid().width(), 80);
         assert_eq!(state.main_grid().height(), 24);
-        assert!(state.dirty().has_dirty());
     }
 
     #[test]
     fn test_grid_resize() {
         let mut state = EditorState::new(80, 24);
-        state.clear_dirty();
 
         state.grid_resize(1, 100, 30);
         assert_eq!(state.main_grid().width(), 100);
         assert_eq!(state.main_grid().height(), 30);
-        assert!(state.dirty().is_full_dirty());
     }
 
     #[test]
     fn test_grid_clear() {
         let mut state = EditorState::new(80, 24);
         state.main_grid_mut()[(0, 0)].text = "x".into();
-        state.clear_dirty();
 
         state.grid_clear(1);
         assert_eq!(state.main_grid()[(0, 0)].text, " ");
-        assert!(state.dirty().is_full_dirty());
     }
 
     #[test]
     fn test_grid_line() {
         let mut state = EditorState::new(80, 24);
-        state.clear_dirty();
 
         let cells = vec![("a".into(), Some(0), 1), ("b".into(), None, 1)];
         state.grid_line(1, 5, 0, &cells);
 
         assert_eq!(state.main_grid()[(5, 0)].text, "a");
         assert_eq!(state.main_grid()[(5, 1)].text, "b");
-        assert!(state.dirty().is_row_dirty(5));
-        assert!(!state.dirty().is_row_dirty(4));
     }
 
     #[test]
@@ -294,34 +244,27 @@ mod tests {
         let mut state = EditorState::new(80, 24);
         state.main_grid_mut()[(0, 0)].text = "a".into();
         state.main_grid_mut()[(1, 0)].text = "b".into();
-        state.clear_dirty();
 
         state.grid_scroll(1, 0, 24, 0, 80, 1);
         assert_eq!(state.main_grid()[(0, 0)].text, "b");
-        assert!(state.dirty().is_row_dirty(0));
     }
 
     #[test]
     fn test_cursor_goto() {
         let mut state = EditorState::new(80, 24);
-        state.clear_dirty();
 
         state.grid_cursor_goto(1, 10, 20);
         assert_eq!(state.cursor.grid, 1);
         assert_eq!(state.cursor.row, 10);
         assert_eq!(state.cursor.col, 20);
-        assert!(state.dirty().is_row_dirty(10));
     }
 
     #[test]
     fn test_cursor_move_marks_old_row() {
         let mut state = EditorState::new(80, 24);
         state.grid_cursor_goto(1, 5, 0);
-        state.clear_dirty();
 
         state.grid_cursor_goto(1, 10, 0);
-        assert!(state.dirty().is_row_dirty(5));
-        assert!(state.dirty().is_row_dirty(10));
     }
 
     #[test]
@@ -341,14 +284,12 @@ mod tests {
     #[test]
     fn test_default_colors_set() {
         let mut state = EditorState::new(80, 24);
-        state.clear_dirty();
 
         state.default_colors_set(0xFFFFFF, 0x000000, 0xFF0000);
         assert_eq!(
             state.highlights.defaults.foreground,
             Color::from_rgb(255, 255, 255)
         );
-        assert!(state.dirty().is_full_dirty());
     }
 
     #[test]
@@ -386,11 +327,9 @@ mod tests {
         ];
         state.mode_info_set(modes);
         state.cursor.row = 5;
-        state.clear_dirty();
 
         state.mode_change("insert", 1);
         assert_eq!(state.current_mode().cursor_shape, CursorShape::Vertical);
-        assert!(state.dirty().is_row_dirty(5));
     }
 
     #[test]

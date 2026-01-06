@@ -232,9 +232,7 @@ impl GuiApp {
     fn do_render(&mut self) {
         if let RenderState::Ready(ref mut renderer) = self.render_state {
             match renderer.render(&self.editor_state) {
-                Ok(()) => {
-                    self.editor_state.clear_dirty();
-                }
+                Ok(()) => {}
                 Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
                     if let Some(ref window) = self.window {
                         renderer.resize(window.inner_size());

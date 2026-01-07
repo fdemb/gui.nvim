@@ -185,6 +185,31 @@ impl GuiApp {
         (cols.max(1.0) as u64, rows.max(1.0) as u64)
     }
 
+    fn update_layout(&mut self, scale_factor: f64) {
+        if let RenderState::Ready(ref mut renderer) = self.render_state {
+            if let Err(e) = renderer.update_font(&self.config, scale_factor) {
+                log::error!("Failed to update font: {}", e);
+            } else {
+                let (cw, ch) = renderer.cell_size();
+                self.cell_metrics.cell_width = cw as f64;
+                self.cell_metrics.cell_height = ch as f64;
+
+                if let Some(ref window) = self.window {
+                    let size = window.inner_size();
+                    let (cols, rows) = self.calculate_grid_size(size.width, size.height);
+                    if cols != self.current_cols || rows != self.current_rows {
+                        self.current_cols = cols;
+                        self.current_rows = rows;
+                        if let Some(ref bridge) = self.app_bridge {
+                            bridge.resize(cols, rows);
+                        }
+                    }
+                    window.request_redraw();
+                }
+            }
+        }
+    }
+
     fn handle_option_set(&mut self, name: &str, value: &nvim_rs::Value) {
         if name == "guifont" {
             if let Some(s) = value.as_str() {
@@ -198,32 +223,9 @@ impl GuiApp {
                         self.config.font.size = Some(s);
                     }
 
-                    if let RenderState::Ready(ref mut renderer) = self.render_state {
-                        if let Some(window) = &self.window {
-                            let scale_factor = window.scale_factor();
-                            if let Err(e) = renderer.update_font(&self.config, scale_factor) {
-                                log::error!("Failed to update font: {}", e);
-                            } else {
-                                let (cw, ch) = renderer.cell_size();
-                                self.cell_metrics.cell_width = cw as f64;
-                                self.cell_metrics.cell_height = ch as f64;
-
-                                // Resize grid
-                                let size = window.inner_size();
-                                let (cols, rows) =
-                                    self.calculate_grid_size(size.width, size.height);
-                                if cols != self.current_cols || rows != self.current_rows {
-                                    self.current_cols = cols;
-                                    self.current_rows = rows;
-                                    if let Some(ref bridge) = self.app_bridge {
-                                        bridge.resize(cols, rows);
-                                    }
-                                }
-
-                                // Request redraw
-                                window.request_redraw();
-                            }
-                        }
+                    if let Some(window) = &self.window {
+                        let scale_factor = window.scale_factor();
+                        self.update_layout(scale_factor);
                     }
                 }
             }
@@ -466,29 +468,7 @@ impl ApplicationHandler<UserEvent> for GuiApp {
             }
             UserEvent::GUI(event) => match event {
                 GUIEvent::ScaleFactorChanged(scale_factor) => {
-                    if let RenderState::Ready(ref mut renderer) = self.render_state {
-                        if let Err(e) = renderer.update_font(&self.config, scale_factor) {
-                            log::error!("Failed to update font on scale change: {}", e);
-                        } else {
-                            let (cw, ch) = renderer.cell_size();
-                            self.cell_metrics.cell_width = cw as f64;
-                            self.cell_metrics.cell_height = ch as f64;
-
-                            if let Some(ref window) = self.window {
-                                let size = window.inner_size();
-                                let (cols, rows) =
-                                    self.calculate_grid_size(size.width, size.height);
-                                if cols != self.current_cols || rows != self.current_rows {
-                                    self.current_cols = cols;
-                                    self.current_rows = rows;
-                                    if let Some(ref bridge) = self.app_bridge {
-                                        bridge.resize(cols, rows);
-                                    }
-                                }
-                                window.request_redraw();
-                            }
-                        }
-                    }
+                    self.update_layout(scale_factor);
                 }
                 _ => {}
             },

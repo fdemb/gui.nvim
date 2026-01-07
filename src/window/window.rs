@@ -12,10 +12,7 @@ use crate::config::Config;
 use crate::constants::{DEFAULT_COLS, DEFAULT_ROWS, PADDING, PADDING_TOP};
 use crate::editor::EditorState;
 use crate::event::{GUIEvent, NeovimEvent, UserEvent};
-use crate::input::{
-    key_event_to_neovim, modifiers_to_string, mouse_button_to_type, pixel_to_grid,
-    scroll_delta_to_direction, CellMetrics, Modifiers, MouseAction, MouseState,
-};
+use crate::input::{CellMetrics, InputHandler};
 use crate::renderer::Renderer;
 
 #[cfg(target_os = "macos")]
@@ -44,8 +41,7 @@ pub struct GuiApp {
     close_requested: bool,
     current_cols: u64,
     current_rows: u64,
-    modifiers: Modifiers,
-    mouse_state: MouseState,
+    input_handler: InputHandler,
     cell_metrics: CellMetrics,
     editor_state: EditorState,
     render_state: RenderState,
@@ -66,8 +62,7 @@ impl GuiApp {
             close_requested: false,
             current_cols: DEFAULT_COLS,
             current_rows: DEFAULT_ROWS,
-            modifiers: Modifiers::default(),
-            mouse_state: MouseState::new(),
+            input_handler: InputHandler::new(),
             cell_metrics,
             editor_state: EditorState::new(DEFAULT_COLS as usize, DEFAULT_ROWS as usize),
             render_state: RenderState::Uninitialized,
@@ -336,15 +331,12 @@ impl ApplicationHandler<UserEvent> for GuiApp {
             }
 
             WindowEvent::ModifiersChanged(modifiers) => {
-                self.modifiers = Modifiers::from(modifiers.state());
+                self.input_handler.handle_modifiers_changed(modifiers);
             }
 
             WindowEvent::KeyboardInput { event, .. } => {
-                if let Some(keys) = key_event_to_neovim(&event, &self.modifiers) {
-                    log::trace!("Keyboard input: {}", keys);
-                    if let Some(ref bridge) = self.app_bridge {
-                        bridge.input(keys);
-                    }
+                if let Some(ref bridge) = self.app_bridge {
+                    self.input_handler.handle_keyboard_input(&event, bridge);
                 }
 
                 if event.state == ElementState::Pressed {
@@ -355,78 +347,21 @@ impl ApplicationHandler<UserEvent> for GuiApp {
             }
 
             WindowEvent::MouseInput { state, button, .. } => {
-                if let Some(button_type) = mouse_button_to_type(button) {
-                    if let Some(grid_pos) = self.mouse_state.last_position {
-                        let action = match state {
-                            ElementState::Pressed => {
-                                self.mouse_state.button_pressed(button_type);
-                                MouseAction::Press
-                            }
-                            ElementState::Released => {
-                                self.mouse_state.button_released();
-                                MouseAction::Release
-                            }
-                        };
-
-                        let modifier_str = modifiers_to_string(&self.modifiers);
-                        if let Some(ref bridge) = self.app_bridge {
-                            bridge.mouse_input(
-                                button_type.as_str(),
-                                action.as_str(),
-                                &modifier_str,
-                                0,
-                                grid_pos.row,
-                                grid_pos.col,
-                            );
-                        }
-                    }
+                if let Some(ref bridge) = self.app_bridge {
+                    self.input_handler.handle_mouse_input(state, button, bridge);
                 }
             }
 
             WindowEvent::CursorMoved { position, .. } => {
-                let grid_pos = pixel_to_grid(position, &self.cell_metrics);
-                let old_pos = self.mouse_state.last_position;
-                self.mouse_state.update_position(grid_pos);
-
-                if self.mouse_state.is_dragging() {
-                    if old_pos
-                        .map(|p| p.row != grid_pos.row || p.col != grid_pos.col)
-                        .unwrap_or(true)
-                    {
-                        if let Some(button_type) = self.mouse_state.pressed_button {
-                            let modifier_str = modifiers_to_string(&self.modifiers);
-                            if let Some(ref bridge) = self.app_bridge {
-                                bridge.mouse_input(
-                                    button_type.as_str(),
-                                    MouseAction::Drag.as_str(),
-                                    &modifier_str,
-                                    0,
-                                    grid_pos.row,
-                                    grid_pos.col,
-                                );
-                            }
-                        }
-                    }
+                if let Some(ref bridge) = self.app_bridge {
+                    self.input_handler
+                        .handle_cursor_moved(position, &self.cell_metrics, bridge);
                 }
             }
 
             WindowEvent::MouseWheel { delta, .. } => {
-                if let Some(grid_pos) = self.mouse_state.last_position {
-                    if let Some((direction, count)) = scroll_delta_to_direction(delta) {
-                        let modifier_str = modifiers_to_string(&self.modifiers);
-                        if let Some(ref bridge) = self.app_bridge {
-                            for _ in 0..count {
-                                bridge.mouse_input(
-                                    "wheel",
-                                    direction.as_str(),
-                                    &modifier_str,
-                                    0,
-                                    grid_pos.row,
-                                    grid_pos.col,
-                                );
-                            }
-                        }
-                    }
+                if let Some(ref bridge) = self.app_bridge {
+                    self.input_handler.handle_mouse_wheel(delta, bridge);
                 }
             }
 

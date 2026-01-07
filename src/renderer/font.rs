@@ -128,9 +128,22 @@ impl FontSystem {
             character: 'm',
             size,
         };
-        rasterizer.get_glyph(glyph_key)?;
 
-        let metrics = rasterizer.metrics(font_key, size)?;
+        // Handle MissingGlyph error which might return a fallback glyph
+        let glyph = match rasterizer.get_glyph(glyph_key) {
+            Ok(g) => g,
+            Err(CrossfontError::MissingGlyph(g)) => g,
+            Err(e) => return Err(FontError::Crossfont(e)),
+        };
+
+        let mut metrics = rasterizer.metrics(font_key, size)?;
+
+        // Use the advance width of 'm' as the cell width to handle condensed fonts correctly.
+        // Font metrics often report a larger average advance than the actual width of characters
+        // for condensed fonts.
+        if glyph.advance.0 > 0 {
+            metrics.average_advance = glyph.advance.0 as f64;
+        }
 
         let bold_key = Self::load_variant(
             &mut rasterizer,
@@ -250,28 +263,30 @@ impl FontSystem {
         let glyph = match self.rasterizer.get_glyph(glyph_key) {
             Ok(g) => g,
             Err(e) => {
-                // If glyph is missing and we have a symbols font, try that
-                if let Some(symbols_key) = self.symbols_key {
+                // Check symbols font first if the glyph is missing
+                let symbols_found = if let Some(symbols_key) = self.symbols_key {
                     if matches!(e, CrossfontError::MissingGlyph(_)) {
                         let symbol_glyph_key = GlyphKey {
                             font_key: symbols_key,
                             character,
                             size: self.font_size,
                         };
-                        if let Ok(g) = self.rasterizer.get_glyph(symbol_glyph_key) {
-                            // We found it in the symbols font!
-                            // Note: we might need to adjust metrics or position if needed,
-                            // but for now let's just use it.
-                            g
-                        } else {
-                            // Still not found, return original error
-                            return Err(FontError::Crossfont(e));
-                        }
+                        self.rasterizer.get_glyph(symbol_glyph_key).ok()
                     } else {
-                        return Err(FontError::Crossfont(e));
+                        None
                     }
                 } else {
-                    return Err(FontError::Crossfont(e));
+                    None
+                };
+
+                if let Some(g) = symbols_found {
+                    g
+                } else {
+                    // If not found in symbols, try to rescue the fallback glyph from the error
+                    match e {
+                        CrossfontError::MissingGlyph(g) => g,
+                        _ => return Err(FontError::Crossfont(e)),
+                    }
                 }
             }
         };

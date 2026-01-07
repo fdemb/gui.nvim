@@ -791,6 +791,24 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_option_set() {
+        let args = vec![Value::Array(vec![
+            Value::from("option_set"),
+            Value::Array(vec![Value::from("guifont"), Value::from("Fira Code:h12")]),
+        ])];
+        let events = parse_redraw(args);
+
+        assert_eq!(events.len(), 1);
+        assert_eq!(
+            events[0],
+            RedrawEvent::OptionSet {
+                name: "guifont".to_string(),
+                value: Value::from("Fira Code:h12"),
+            }
+        );
+    }
+
+    #[test]
     fn test_parse_empty_args() {
         let events = parse_redraw(vec![]);
         assert!(events.is_empty());

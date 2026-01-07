@@ -28,7 +28,10 @@ pub struct NeovimProcess {
 }
 
 impl NeovimProcess {
-    pub async fn spawn(event_proxy: EventLoopProxy<UserEvent>) -> io::Result<Self> {
+    pub async fn spawn(
+        event_proxy: EventLoopProxy<UserEvent>,
+        args: Vec<String>,
+    ) -> io::Result<Self> {
         let nvim_path = find_nvim_path()?;
         let handler = NeovimHandler::new(event_proxy);
 
@@ -39,7 +42,8 @@ impl NeovimProcess {
         }
 
         let mut cmd = Command::new(&nvim_path);
-        cmd.arg("--embed")
+        cmd.args(&args)
+            .arg("--embed")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());

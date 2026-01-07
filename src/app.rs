@@ -7,7 +7,7 @@ use crate::bridge::{NeovimProcess, DEFAULT_COLS, DEFAULT_ROWS};
 use crate::event::{NeovimEvent, UserEvent};
 
 pub enum AppCommand {
-    SpawnNeovim,
+    SpawnNeovim(Vec<String>),
     Resize {
         cols: u64,
         rows: u64,
@@ -48,8 +48,8 @@ impl AppBridge {
         }
     }
 
-    pub fn spawn_neovim(&self) {
-        let _ = self.command_tx.send(AppCommand::SpawnNeovim);
+    pub fn spawn_neovim(&self, args: Vec<String>) {
+        let _ = self.command_tx.send(AppCommand::SpawnNeovim(args));
     }
 
     pub fn resize(&self, cols: u64, rows: u64) {
@@ -92,28 +92,30 @@ async fn run_neovim_loop(
 
     while let Some(cmd) = command_rx.recv().await {
         match cmd {
-            AppCommand::SpawnNeovim => match NeovimProcess::spawn(event_proxy.clone()).await {
-                Ok(mut process) => {
-                    if let Err(e) = process.ui_attach(DEFAULT_COLS, DEFAULT_ROWS).await {
-                        log::error!("Failed to attach UI: {:?}", e);
-                        continue;
-                    }
-                    log::info!("Neovim UI attached");
+            AppCommand::SpawnNeovim(args) => {
+                match NeovimProcess::spawn(event_proxy.clone(), args).await {
+                    Ok(mut process) => {
+                        if let Err(e) = process.ui_attach(DEFAULT_COLS, DEFAULT_ROWS).await {
+                            log::error!("Failed to attach UI: {:?}", e);
+                            continue;
+                        }
+                        log::info!("Neovim UI attached");
 
-                    if let Some(io_handle) = process.io_handle.take() {
-                        let proxy = event_proxy.clone();
-                        tokio::spawn(async move {
-                            let _ = io_handle.await;
-                            let _ = proxy.send_event(UserEvent::Neovim(NeovimEvent::Quit));
-                        });
-                    }
+                        if let Some(io_handle) = process.io_handle.take() {
+                            let proxy = event_proxy.clone();
+                            tokio::spawn(async move {
+                                let _ = io_handle.await;
+                                let _ = proxy.send_event(UserEvent::Neovim(NeovimEvent::Quit));
+                            });
+                        }
 
-                    nvim = Some(process);
+                        nvim = Some(process);
+                    }
+                    Err(e) => {
+                        log::error!("Failed to spawn Neovim: {}", e);
+                    }
                 }
-                Err(e) => {
-                    log::error!("Failed to spawn Neovim: {}", e);
-                }
-            },
+            }
             AppCommand::Resize { cols, rows } => {
                 if let Some(ref nvim) = nvim {
                     let neovim = nvim.neovim.clone();

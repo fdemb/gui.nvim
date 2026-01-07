@@ -39,6 +39,7 @@ pub struct GuiApp {
     window: Option<Arc<Window>>,
     event_proxy: EventLoopProxy<UserEvent>,
     config: Config,
+    args: Vec<String>,
     app_bridge: Option<AppBridge>,
     close_requested: bool,
     current_cols: u64,
@@ -51,7 +52,7 @@ pub struct GuiApp {
 }
 
 impl GuiApp {
-    pub fn new(event_proxy: EventLoopProxy<UserEvent>, config: Config) -> Self {
+    pub fn new(event_proxy: EventLoopProxy<UserEvent>, config: Config, args: Vec<String>) -> Self {
         let mut cell_metrics = CellMetrics::default();
         cell_metrics.padding_x = PADDING as f64;
         cell_metrics.padding_y = PADDING_TOP as f64;
@@ -60,6 +61,7 @@ impl GuiApp {
             window: None,
             event_proxy,
             config,
+            args,
             app_bridge: None,
             close_requested: false,
             current_cols: DEFAULT_COLS,
@@ -102,7 +104,7 @@ impl GuiApp {
                 )));
 
                 let bridge = AppBridge::new(self.event_proxy.clone());
-                bridge.spawn_neovim();
+                bridge.spawn_neovim(self.args.clone());
                 self.app_bridge = Some(bridge);
 
                 let _ = self

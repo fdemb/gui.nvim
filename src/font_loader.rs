@@ -62,3 +62,23 @@ pub fn register_embedded_fonts() {
     #[cfg(not(target_os = "macos"))]
     other::register_embedded_fonts();
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_embedded_font_exists() {
+        let font_data = include_bytes!("../assets/fonts/SymbolsNerdFont-Regular.ttf");
+        assert!(
+            !font_data.is_empty(),
+            "Embedded font data should not be empty"
+        );
+    }
+
+    #[test]
+    fn test_register_embedded_fonts_no_panic() {
+        // This should run without panicking
+        register_embedded_fonts();
+    }
+}

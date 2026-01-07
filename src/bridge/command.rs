@@ -25,6 +25,71 @@ pub enum AppCommand {
     Quit,
 }
 
+#[cfg(test)]
+impl PartialEq for AppCommand {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::SpawnNeovim(a), Self::SpawnNeovim(b)) => a == b,
+            (Self::Resize { cols: c1, rows: r1 }, Self::Resize { cols: c2, rows: r2 }) => {
+                c1 == c2 && r1 == r2
+            }
+            (Self::Input(a), Self::Input(b)) => a == b,
+            (
+                Self::MouseInput {
+                    button: b1,
+                    action: a1,
+                    modifier: m1,
+                    grid: g1,
+                    row: r1,
+                    col: c1,
+                },
+                Self::MouseInput {
+                    button: b2,
+                    action: a2,
+                    modifier: m2,
+                    grid: g2,
+                    row: r2,
+                    col: c2,
+                },
+            ) => b1 == b2 && a1 == a2 && m1 == m2 && g1 == g2 && r1 == r2 && c1 == c2,
+            (Self::Quit, Self::Quit) => true,
+            _ => false,
+        }
+    }
+}
+
+#[cfg(test)]
+impl std::fmt::Debug for AppCommand {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::SpawnNeovim(args) => f.debug_tuple("SpawnNeovim").field(args).finish(),
+            Self::Resize { cols, rows } => f
+                .debug_struct("Resize")
+                .field("cols", cols)
+                .field("rows", rows)
+                .finish(),
+            Self::Input(keys) => f.debug_tuple("Input").field(keys).finish(),
+            Self::MouseInput {
+                button,
+                action,
+                modifier,
+                grid,
+                row,
+                col,
+            } => f
+                .debug_struct("MouseInput")
+                .field("button", button)
+                .field("action", action)
+                .field("modifier", modifier)
+                .field("grid", grid)
+                .field("row", row)
+                .field("col", col)
+                .finish(),
+            Self::Quit => write!(f, "Quit"),
+        }
+    }
+}
+
 pub struct AppBridge {
     command_tx: mpsc::UnboundedSender<AppCommand>,
     #[allow(dead_code)]
@@ -47,6 +112,19 @@ impl AppBridge {
             command_tx,
             runtime,
         }
+    }
+
+    #[cfg(test)]
+    pub fn new_for_test() -> (Self, mpsc::UnboundedReceiver<AppCommand>) {
+        let (command_tx, command_rx) = mpsc::unbounded_channel();
+        let runtime = Arc::new(Runtime::new().expect("Failed to create tokio runtime"));
+        (
+            Self {
+                command_tx,
+                runtime,
+            },
+            command_rx,
+        )
     }
 
     pub fn spawn_neovim(&self, args: Vec<String>) {
@@ -157,6 +235,72 @@ async fn run_neovim_loop(
                 }
                 break;
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_app_bridge_send_commands() {
+        let (bridge, mut rx) = AppBridge::new_for_test();
+
+        // SpawnNeovim
+        bridge.spawn_neovim(vec!["--clean".to_string()]);
+        match rx.blocking_recv() {
+            Some(AppCommand::SpawnNeovim(args)) => {
+                assert_eq!(args, vec!["--clean".to_string()]);
+            }
+            _ => panic!("Expected SpawnNeovim"),
+        }
+
+        // Resize
+        bridge.resize(100, 50);
+        match rx.blocking_recv() {
+            Some(AppCommand::Resize { cols, rows }) => {
+                assert_eq!(cols, 100);
+                assert_eq!(rows, 50);
+            }
+            _ => panic!("Expected Resize"),
+        }
+
+        // Input
+        bridge.input("<Esc>".to_string());
+        match rx.blocking_recv() {
+            Some(AppCommand::Input(keys)) => {
+                assert_eq!(keys, "<Esc>");
+            }
+            _ => panic!("Expected Input"),
+        }
+
+        // MouseInput
+        bridge.mouse_input("left", "press", "", 0, 10, 20);
+        match rx.blocking_recv() {
+            Some(AppCommand::MouseInput {
+                button,
+                action,
+                modifier,
+                grid,
+                row,
+                col,
+            }) => {
+                assert_eq!(button, "left");
+                assert_eq!(action, "press");
+                assert_eq!(modifier, "");
+                assert_eq!(grid, 0);
+                assert_eq!(row, 10);
+                assert_eq!(col, 20);
+            }
+            _ => panic!("Expected MouseInput"),
+        }
+
+        // Quit
+        bridge.quit();
+        match rx.blocking_recv() {
+            Some(AppCommand::Quit) => {}
+            _ => panic!("Expected Quit"),
         }
     }
 }

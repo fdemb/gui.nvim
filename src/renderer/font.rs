@@ -89,6 +89,7 @@ pub struct FontSystem {
     bold_key: FontKey,
     italic_key: FontKey,
     bold_italic_key: FontKey,
+    symbols_key: Option<FontKey>,
     font_size: Size,
     metrics: Metrics,
 }
@@ -156,12 +157,23 @@ impl FontSystem {
         )
         .unwrap_or(font_key);
 
+        // Try to load the embedded Symbols Nerd Font
+        let symbols_desc = FontDesc::new(
+            "Symbols Nerd Font",
+            Style::Description {
+                slant: Slant::Normal,
+                weight: Weight::Normal,
+            },
+        );
+        let symbols_key = rasterizer.load_font(&symbols_desc, size).ok();
+
         Ok(Self {
             rasterizer,
             font_key,
             bold_key,
             italic_key,
             bold_italic_key,
+            symbols_key,
             font_size: size,
             metrics,
         })
@@ -235,7 +247,34 @@ impl FontSystem {
             size: self.font_size,
         };
 
-        let glyph = self.rasterizer.get_glyph(glyph_key)?;
+        let glyph = match self.rasterizer.get_glyph(glyph_key) {
+            Ok(g) => g,
+            Err(e) => {
+                // If glyph is missing and we have a symbols font, try that
+                if let Some(symbols_key) = self.symbols_key {
+                    if matches!(e, CrossfontError::MissingGlyph(_)) {
+                        let symbol_glyph_key = GlyphKey {
+                            font_key: symbols_key,
+                            character,
+                            size: self.font_size,
+                        };
+                        if let Ok(g) = self.rasterizer.get_glyph(symbol_glyph_key) {
+                            // We found it in the symbols font!
+                            // Note: we might need to adjust metrics or position if needed,
+                            // but for now let's just use it.
+                            g
+                        } else {
+                            // Still not found, return original error
+                            return Err(FontError::Crossfont(e));
+                        }
+                    } else {
+                        return Err(FontError::Crossfont(e));
+                    }
+                } else {
+                    return Err(FontError::Crossfont(e));
+                }
+            }
+        };
 
         let buffer = match glyph.buffer {
             BitmapBuffer::Rgb(data) => GlyphBuffer::Rgb(data),

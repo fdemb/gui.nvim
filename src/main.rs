@@ -4,6 +4,7 @@ mod config;
 mod editor;
 mod env;
 mod event;
+mod font_loader;
 mod input;
 mod renderer;
 mod window;
@@ -112,6 +113,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     event_loop.set_control_flow(ControlFlow::Wait);
 
     let proxy = event_loop.create_proxy();
+
+    // Register embedded fonts
+    font_loader::register_embedded_fonts();
+
     let config = config::Config::load();
     let mut app = GuiApp::new(proxy, config);
 

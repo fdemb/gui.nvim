@@ -3,6 +3,7 @@ mod batch;
 mod color;
 mod context;
 mod font;
+mod geometry;
 mod grid_renderer;
 mod pipeline;
 

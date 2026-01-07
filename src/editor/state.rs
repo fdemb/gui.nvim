@@ -26,12 +26,32 @@ pub struct ModeInfo {
 }
 
 /// The cursor's current state.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct Cursor {
     pub grid: u64,
     pub row: usize,
     pub col: usize,
     pub visible: bool,
+    /// Whether the cursor is currently visible due to blinking.
+    pub blink_visible: bool,
+    /// Timestamp (ms) of the last blink reset (e.g. cursor movement).
+    pub last_blink_time: u64,
+    /// Whether a blink reset is pending (waiting for the next update).
+    pub blink_reset_pending: bool,
+}
+
+impl Default for Cursor {
+    fn default() -> Self {
+        Self {
+            grid: 1,
+            row: 0,
+            col: 0,
+            visible: true,
+            blink_visible: true,
+            last_blink_time: 0,
+            blink_reset_pending: false,
+        }
+    }
 }
 
 /// Central container for all editor state.
@@ -158,6 +178,7 @@ impl EditorState {
         self.cursor.grid = grid_id;
         self.cursor.row = row;
         self.cursor.col = col;
+        self.reset_blink();
     }
 
     /// Handles a hl_attr_define event.
@@ -180,11 +201,59 @@ impl EditorState {
         if self.modes.is_empty() {
             self.modes.push(ModeInfo::default());
         }
+        self.reset_blink();
     }
 
     /// Handles a mode_change event.
     pub fn mode_change(&mut self, _mode: &str, mode_idx: usize) {
         self.current_mode = mode_idx;
+        self.reset_blink();
+    }
+
+    /// Resets the blink timer (e.g. on cursor move).
+    pub fn reset_blink(&mut self) {
+        self.cursor.blink_reset_pending = true;
+        self.cursor.blink_visible = true;
+    }
+
+    /// Updates the cursor blink state based on the current time (ms).
+    /// Returns true if the blink state changed (requiring a redraw).
+    pub fn update_blink(&mut self, now: u64) -> bool {
+        let old_visible = self.cursor.blink_visible;
+
+        if self.cursor.blink_reset_pending {
+            self.cursor.last_blink_time = now;
+            self.cursor.blink_reset_pending = false;
+            self.cursor.blink_visible = true;
+            return old_visible != true;
+        }
+
+        let mode = self.current_mode();
+        if mode.blink_on == 0 || mode.blink_off == 0 {
+            self.cursor.blink_visible = true;
+            return old_visible != true;
+        }
+
+        let elapsed = now.saturating_sub(self.cursor.last_blink_time);
+        let wait = mode.blink_wait as u64;
+
+        if elapsed < wait {
+            self.cursor.blink_visible = true;
+            return old_visible != true;
+        }
+
+        let blink_elapsed = elapsed - wait;
+        let cycle = (mode.blink_on + mode.blink_off) as u64;
+
+        if cycle == 0 {
+            self.cursor.blink_visible = true;
+            return old_visible != true;
+        }
+
+        let phase = blink_elapsed % cycle;
+        self.cursor.blink_visible = phase < (mode.blink_on as u64);
+
+        self.cursor.blink_visible != old_visible
     }
 
     /// Handles a flush event (marks end of a batch of updates).
@@ -339,5 +408,44 @@ mod tests {
         state.grid_resize(2, 40, 10);
         assert!(state.grid(2).is_some());
         assert_eq!(state.grid(2).unwrap().width(), 40);
+    }
+
+    #[test]
+    fn test_cursor_blinking() {
+        let mut state = EditorState::new(80, 24);
+        let modes = vec![ModeInfo {
+            blink_on: 100,
+            blink_off: 100,
+            blink_wait: 0,
+            ..Default::default()
+        }];
+        state.mode_info_set(modes);
+
+        // Initial state
+        state.reset_blink();
+        // Update with time 0 to process reset
+        state.update_blink(0);
+        assert!(state.cursor.blink_visible);
+
+        // Advance time < blink_on
+        state.update_blink(50);
+        assert!(state.cursor.blink_visible);
+
+        // Advance time > blink_on
+        state.update_blink(150);
+        assert!(!state.cursor.blink_visible);
+
+        // Advance time > blink_on + blink_off
+        state.update_blink(250);
+        assert!(state.cursor.blink_visible);
+
+        // Test reset
+        state.reset_blink();
+        state.update_blink(260); // Reset at 260
+        assert!(state.cursor.blink_visible);
+
+        // 260 + 150 = 410 -> should be hidden
+        state.update_blink(410);
+        assert!(!state.cursor.blink_visible);
     }
 }

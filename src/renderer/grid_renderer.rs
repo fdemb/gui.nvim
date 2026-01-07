@@ -261,7 +261,7 @@ impl GridRenderer {
         y_offset: f32,
     ) {
         let cursor = &state.cursor;
-        if !cursor.visible {
+        if !cursor.visible || !cursor.blink_visible {
             return;
         }
 

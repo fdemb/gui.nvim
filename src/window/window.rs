@@ -1,8 +1,9 @@
 use std::sync::Arc;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::{ElementState, WindowEvent};
-use winit::event_loop::{ActiveEventLoop, EventLoopProxy};
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoopProxy};
 use winit::window::{Window, WindowAttributes, WindowId};
 
 use crate::app::{AppBridge, PADDING, PADDING_TOP};
@@ -459,9 +460,32 @@ impl ApplicationHandler<UserEvent> for GuiApp {
         }
     }
 
-    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         if self.close_requested {
             return;
+        }
+
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_millis() as u64;
+
+        if self.editor_state.update_blink(now) {
+            if let Some(window) = &self.window {
+                window.request_redraw();
+            }
+        }
+
+        let mode = self.editor_state.current_mode();
+        if mode.blink_on > 0 && mode.blink_off > 0 {
+            // Schedule next check. Since update_blink uses absolute time,
+            // we can just wake up periodically to check.
+            // 100ms is a reasonable resolution for cursor blinking.
+            event_loop.set_control_flow(ControlFlow::WaitUntil(
+                std::time::Instant::now() + Duration::from_millis(100),
+            ));
+        } else {
+            event_loop.set_control_flow(ControlFlow::Wait);
         }
     }
 }

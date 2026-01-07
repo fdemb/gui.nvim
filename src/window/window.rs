@@ -448,6 +448,7 @@ impl ApplicationHandler<UserEvent> for GuiApp {
                     NeovimEvent::Flush => {}
                     NeovimEvent::Quit => {
                         self.close_requested = true;
+                        _event_loop.exit();
                     }
                 }
                 if let Some(window) = &self.window {

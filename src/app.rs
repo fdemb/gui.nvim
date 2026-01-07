@@ -4,7 +4,7 @@ use tokio::sync::mpsc;
 use winit::event_loop::EventLoopProxy;
 
 use crate::bridge::{NeovimProcess, DEFAULT_COLS, DEFAULT_ROWS};
-use crate::event::UserEvent;
+use crate::event::{NeovimEvent, UserEvent};
 
 pub enum AppCommand {
     SpawnNeovim,
@@ -93,12 +93,21 @@ async fn run_neovim_loop(
     while let Some(cmd) = command_rx.recv().await {
         match cmd {
             AppCommand::SpawnNeovim => match NeovimProcess::spawn(event_proxy.clone()).await {
-                Ok(process) => {
+                Ok(mut process) => {
                     if let Err(e) = process.ui_attach(DEFAULT_COLS, DEFAULT_ROWS).await {
                         log::error!("Failed to attach UI: {:?}", e);
                         continue;
                     }
                     log::info!("Neovim UI attached");
+
+                    if let Some(io_handle) = process.io_handle.take() {
+                        let proxy = event_proxy.clone();
+                        tokio::spawn(async move {
+                            let _ = io_handle.await;
+                            let _ = proxy.send_event(UserEvent::Neovim(NeovimEvent::Quit));
+                        });
+                    }
+
                     nvim = Some(process);
                 }
                 Err(e) => {

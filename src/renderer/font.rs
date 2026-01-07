@@ -425,6 +425,10 @@ mod tests {
 
     #[test]
     fn test_embedded_font_loading() {
+        // Ensure embedded fonts are registered before testing loading
+        #[cfg(target_os = "macos")]
+        crate::font_loader::register_embedded_fonts();
+
         let config = FontConfig::default();
         let font_system = FontSystem::new(&config).unwrap();
 

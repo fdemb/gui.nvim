@@ -4,7 +4,7 @@ mod config;
 mod editor;
 mod env;
 mod event;
-mod font_loader;
+pub mod font_loader;
 mod input;
 mod renderer;
 mod window;

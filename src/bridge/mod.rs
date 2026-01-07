@@ -1,6 +1,8 @@
+mod command;
 mod neovim;
 mod process;
 pub mod ui;
 
+pub use command::{AppBridge, AppCommand};
 pub use neovim::NeovimHandler;
-pub use process::{NeovimProcess, NvimWriter, DEFAULT_COLS, DEFAULT_ROWS};
+pub use process::{NeovimProcess, NvimWriter};

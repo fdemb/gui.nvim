@@ -1,6 +1,6 @@
-mod app;
 mod bridge;
 mod config;
+mod constants;
 mod editor;
 mod env;
 mod event;
@@ -37,32 +37,27 @@ fn parse_args(args: Vec<String>) -> CliAction {
 }
 
 fn main() {
-    // Initialize logging first
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
-    // Handle CLI arguments
     let args: Vec<String> = std::env::args().collect();
 
     match parse_args(args) {
-        CliAction::Env => {
-            // Subcommand: dump environment variables
-            match env::dump_env() {
-                Ok(count) => {
-                    if let Some(path) = env::env_file_path() {
-                        println!("Captured {} environment variables to:", count);
-                        println!("  {}", path.display());
-                        println!();
-                        println!("These will be loaded automatically when gui.nvim starts.");
-                        println!("Re-run this command after changing your shell configuration.");
-                    }
-                    std::process::exit(0);
+        CliAction::Env => match env::dump_env() {
+            Ok(count) => {
+                if let Some(path) = env::env_file_path() {
+                    println!("Captured {} environment variables to:", count);
+                    println!("  {}", path.display());
+                    println!();
+                    println!("These will be loaded automatically when gui.nvim starts.");
+                    println!("Re-run this command after changing your shell configuration.");
                 }
-                Err(e) => {
-                    eprintln!("Error capturing environment: {}", e);
-                    std::process::exit(1);
-                }
+                std::process::exit(0);
             }
-        }
+            Err(e) => {
+                eprintln!("Error capturing environment: {}", e);
+                std::process::exit(1);
+            }
+        },
         CliAction::Help => {
             print_help();
             std::process::exit(0);
@@ -72,13 +67,11 @@ fn main() {
             std::process::exit(0);
         }
         CliAction::Run(nvim_args) => {
-            // Normal startup: load captured environment first
             match env::load_env() {
                 Ok(Some(count)) => {
                     info!("Loaded {} environment variables from config", count);
                 }
                 Ok(None) => {
-                    // No env file exists, that's fine
                     info!("No environment file found, using system environment");
                 }
                 Err(e) => {

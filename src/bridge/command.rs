@@ -3,7 +3,8 @@ use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
 use winit::event_loop::EventLoopProxy;
 
-use crate::bridge::{NeovimProcess, DEFAULT_COLS, DEFAULT_ROWS};
+use crate::bridge::NeovimProcess;
+use crate::constants::{DEFAULT_COLS, DEFAULT_ROWS};
 use crate::event::{NeovimEvent, UserEvent};
 
 pub enum AppCommand {
@@ -157,53 +158,5 @@ async fn run_neovim_loop(
                 break;
             }
         }
-    }
-}
-
-pub const PADDING: u32 = 2;
-
-#[cfg(target_os = "macos")]
-pub const PADDING_TOP: u32 = 30;
-#[cfg(not(target_os = "macos"))]
-pub const PADDING_TOP: u32 = PADDING;
-
-#[cfg(test)]
-const DEFAULT_CELL_WIDTH: u32 = 10;
-#[cfg(test)]
-const DEFAULT_CELL_HEIGHT: u32 = 20;
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use winit::dpi::PhysicalSize;
-
-    fn calculate_grid_size(size: PhysicalSize<u32>) -> (u64, u64) {
-        let cols = (size.width.saturating_sub(2 * PADDING)) / DEFAULT_CELL_WIDTH;
-        let rows = (size.height.saturating_sub(2 * PADDING)) / DEFAULT_CELL_HEIGHT;
-        (cols.max(1) as u64, rows.max(1) as u64)
-    }
-
-    #[test]
-    fn test_calculate_grid_size() {
-        let size = PhysicalSize::new(804, 484);
-        let (cols, rows) = calculate_grid_size(size);
-        assert_eq!(cols, 80);
-        assert_eq!(rows, 24);
-    }
-
-    #[test]
-    fn test_calculate_grid_size_minimum() {
-        let size = PhysicalSize::new(10, 10);
-        let (cols, rows) = calculate_grid_size(size);
-        assert_eq!(cols, 1);
-        assert_eq!(rows, 1);
-    }
-
-    #[test]
-    fn test_calculate_grid_size_with_padding() {
-        let size = PhysicalSize::new(104, 44);
-        let (cols, rows) = calculate_grid_size(size);
-        assert_eq!(cols, 10);
-        assert_eq!(rows, 2);
     }
 }

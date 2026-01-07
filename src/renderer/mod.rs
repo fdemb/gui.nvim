@@ -6,11 +6,9 @@ mod font;
 mod grid_renderer;
 mod pipeline;
 
-// Re-export only what's needed by external code
 pub use context::{GpuContext, GpuContextError};
 pub use grid_renderer::GridRendererError;
 
-// Internal imports used by Renderer
 use color::{srgb_to_linear, u32_to_linear_rgba};
 use grid_renderer::GridRenderer;
 use pipeline::RenderPipeline;

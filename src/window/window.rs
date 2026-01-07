@@ -6,10 +6,10 @@ use winit::event::{ElementState, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoopProxy};
 use winit::window::{Window, WindowAttributes, WindowId};
 
-use crate::app::{AppBridge, PADDING, PADDING_TOP};
 use crate::bridge::ui::RedrawEvent;
-use crate::bridge::{DEFAULT_COLS, DEFAULT_ROWS};
+use crate::bridge::AppBridge;
 use crate::config::Config;
+use crate::constants::{DEFAULT_COLS, DEFAULT_ROWS, PADDING, PADDING_TOP};
 use crate::editor::EditorState;
 use crate::event::{GUIEvent, NeovimEvent, UserEvent};
 use crate::input::{
@@ -584,7 +584,7 @@ impl ApplicationHandler<UserEvent> for GuiApp {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app::PADDING;
+    use crate::constants::PADDING;
 
     #[test]
     fn test_default_dimensions() {

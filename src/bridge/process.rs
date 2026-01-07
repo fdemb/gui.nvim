@@ -16,9 +16,6 @@ use crate::event::UserEvent;
 
 pub type NvimWriter = Compat<ChildStdin>;
 
-pub const DEFAULT_COLS: u64 = 80;
-pub const DEFAULT_ROWS: u64 = 24;
-
 pub struct NeovimProcess {
     pub neovim: Neovim<NvimWriter>,
     #[allow(dead_code)]
@@ -172,6 +169,7 @@ mod tests {
 
     #[test]
     fn test_default_dimensions() {
+        use crate::constants::{DEFAULT_COLS, DEFAULT_ROWS};
         assert_eq!(DEFAULT_COLS, 80);
         assert_eq!(DEFAULT_ROWS, 24);
     }

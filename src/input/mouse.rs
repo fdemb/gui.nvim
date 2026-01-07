@@ -2,6 +2,7 @@ use winit::dpi::PhysicalPosition;
 use winit::event::{MouseButton, MouseScrollDelta};
 
 use super::keyboard::Modifiers;
+use crate::constants::{DEFAULT_CELL_HEIGHT, DEFAULT_CELL_WIDTH, PADDING};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MouseAction {
@@ -66,10 +67,10 @@ pub struct CellMetrics {
 impl Default for CellMetrics {
     fn default() -> Self {
         Self {
-            cell_width: 10.0,
-            cell_height: 20.0,
-            padding_x: 2.0,
-            padding_y: 2.0,
+            cell_width: DEFAULT_CELL_WIDTH as f64,
+            cell_height: DEFAULT_CELL_HEIGHT as f64,
+            padding_x: PADDING as f64,
+            padding_y: PADDING as f64,
         }
     }
 }

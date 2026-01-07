@@ -85,6 +85,19 @@ impl Renderer {
         self.default_bg = u32_to_linear_rgba(bg);
     }
 
+    pub fn update_font(
+        &mut self,
+        config: &crate::config::Config,
+        scale_factor: f64,
+    ) -> Result<(), RendererError> {
+        self.grid_renderer
+            .update_font(&self.ctx, &config.font, scale_factor)?;
+        let (cell_width, cell_height) = self.grid_renderer.cell_size();
+        self.pipeline
+            .update_cell_size(&self.ctx, cell_width, cell_height);
+        Ok(())
+    }
+
     pub fn render(
         &mut self,
         state: &EditorState,

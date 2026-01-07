@@ -31,6 +31,45 @@ impl Default for FontSettings {
     }
 }
 
+impl FontSettings {
+    pub fn from_guifont(guifont: &str) -> Option<Self> {
+        if guifont.is_empty() {
+            return None;
+        }
+
+        // Handle list of fonts (take first)
+        let first_font = guifont.split(',').next().unwrap_or(guifont);
+
+        // Try parsing "Family:hSize" (macOS/Windows style)
+        if let Some((family, size_str)) = first_font.rsplit_once(":h") {
+            let size = size_str.parse::<f32>().ok();
+            let family = family.replace("\\ ", " ");
+            return Some(Self {
+                family: Some(family),
+                size,
+            });
+        }
+
+        // Try parsing "Family Size" (GTK/X11 style)
+        if let Some((family, size_str)) = first_font.rsplit_once(' ') {
+            if let Ok(size) = size_str.parse::<f32>() {
+                let family = family.replace("\\ ", " ");
+                return Some(Self {
+                    family: Some(family),
+                    size: Some(size),
+                });
+            }
+        }
+
+        // Just family
+        let family = first_font.replace("\\ ", " ");
+        Some(Self {
+            family: Some(family),
+            size: None,
+        })
+    }
+}
+
 impl Config {
     pub fn load() -> Self {
         let config_path = match config_file_path() {
@@ -111,5 +150,40 @@ mod tests {
         let config: Config = toml::from_str(toml).unwrap();
         assert_eq!(config.font.family, None);
         assert_eq!(config.font.size, Some(20.0));
+    }
+
+    #[test]
+    fn test_from_guifont_simple() {
+        let settings = FontSettings::from_guifont("Fira Code:h14").unwrap();
+        assert_eq!(settings.family.as_deref(), Some("Fira Code"));
+        assert_eq!(settings.size, Some(14.0));
+    }
+
+    #[test]
+    fn test_from_guifont_escaped_space() {
+        let settings = FontSettings::from_guifont("Fira\\ Code:h14").unwrap();
+        assert_eq!(settings.family.as_deref(), Some("Fira Code"));
+        assert_eq!(settings.size, Some(14.0));
+    }
+
+    #[test]
+    fn test_from_guifont_gtk_style() {
+        let settings = FontSettings::from_guifont("Fira Code 14").unwrap();
+        assert_eq!(settings.family.as_deref(), Some("Fira Code"));
+        assert_eq!(settings.size, Some(14.0));
+    }
+
+    #[test]
+    fn test_from_guifont_multiple() {
+        let settings = FontSettings::from_guifont("Fira Code:h14,Monospace:h12").unwrap();
+        assert_eq!(settings.family.as_deref(), Some("Fira Code"));
+        assert_eq!(settings.size, Some(14.0));
+    }
+
+    #[test]
+    fn test_from_guifont_no_size() {
+        let settings = FontSettings::from_guifont("Fira Code").unwrap();
+        assert_eq!(settings.family.as_deref(), Some("Fira Code"));
+        assert_eq!(settings.size, None);
     }
 }

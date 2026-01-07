@@ -47,6 +47,31 @@ impl GridRenderer {
         })
     }
 
+    pub fn update_font(
+        &mut self,
+        ctx: &GpuContext,
+        font_settings: &FontSettings,
+        scale_factor: f64,
+    ) -> Result<(), GridRendererError> {
+        let font_config = super::font::FontConfig::new(font_settings, scale_factor);
+        let mut font_system = FontSystem::new(&font_config)?;
+
+        let cell_width = font_system.cell_width();
+        let cell_height = font_system.cell_height();
+        let font_size = Size::new(font_config.scaled_size());
+
+        self.atlas.clear(ctx);
+        self.atlas
+            .prepopulate_ascii(ctx, &mut font_system, font_size);
+
+        self.font_system = font_system;
+        self.cell_width = cell_width;
+        self.cell_height = cell_height;
+        self.font_size = font_size;
+
+        Ok(())
+    }
+
     pub fn cell_size(&self) -> (f32, f32) {
         (self.cell_width, self.cell_height)
     }

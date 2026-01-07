@@ -241,7 +241,56 @@ impl GuiApp {
                     }
                 }
                 RedrawEvent::SetIcon { .. } => {}
-                RedrawEvent::OptionSet { .. } => {}
+                RedrawEvent::OptionSet { name, value } => {
+                    if name == "guifont" {
+                        if let Some(s) = value.as_str() {
+                            if let Some(font_settings) =
+                                crate::config::FontSettings::from_guifont(s)
+                            {
+                                log::info!("Updating font: {:?}", font_settings);
+
+                                if let Some(f) = font_settings.family {
+                                    self.config.font.family = Some(f);
+                                }
+                                if let Some(s) = font_settings.size {
+                                    self.config.font.size = Some(s);
+                                }
+
+                                if let RenderState::Ready(ref mut renderer) = self.render_state {
+                                    if let Some(window) = &self.window {
+                                        let scale_factor = window.scale_factor();
+                                        if let Err(e) =
+                                            renderer.update_font(&self.config, scale_factor)
+                                        {
+                                            log::error!("Failed to update font: {}", e);
+                                        } else {
+                                            let (cw, ch) = renderer.cell_size();
+                                            self.cell_metrics.cell_width = cw as f64;
+                                            self.cell_metrics.cell_height = ch as f64;
+
+                                            // Resize grid
+                                            let size = window.inner_size();
+                                            let (cols, rows) =
+                                                self.calculate_grid_size(size.width, size.height);
+                                            if cols != self.current_cols
+                                                || rows != self.current_rows
+                                            {
+                                                self.current_cols = cols;
+                                                self.current_rows = rows;
+                                                if let Some(ref bridge) = self.app_bridge {
+                                                    bridge.resize(cols, rows);
+                                                }
+                                            }
+
+                                            // Request redraw
+                                            window.request_redraw();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 RedrawEvent::Flush => {
                     self.editor_state.flush();
                 }

@@ -424,6 +424,21 @@ mod tests {
     }
 
     #[test]
+    fn test_embedded_font_loading() {
+        let config = FontConfig::default();
+        let font_system = FontSystem::new(&config).unwrap();
+
+        // On macOS, the embedded font should be registered and loaded.
+        // On other platforms, it might not be available unless installed.
+        if cfg!(target_os = "macos") {
+            assert!(
+                font_system.symbols_key.is_some(),
+                "Embedded Symbols Nerd Font should be loaded on macOS"
+            );
+        }
+    }
+
+    #[test]
     fn test_glyph_cache() {
         use crossfont::Size;
 

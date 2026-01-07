@@ -5,7 +5,7 @@ use winit::event::{ElementState, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoopProxy};
 use winit::window::{Window, WindowAttributes, WindowId};
 
-use crate::app::{AppBridge, PADDING};
+use crate::app::{AppBridge, PADDING, PADDING_TOP};
 use crate::bridge::ui::RedrawEvent;
 use crate::bridge::{DEFAULT_COLS, DEFAULT_ROWS};
 use crate::config::Config;
@@ -16,6 +16,9 @@ use crate::input::{
     scroll_delta_to_direction, CellMetrics, Modifiers, MouseAction, MouseState,
 };
 use crate::renderer::Renderer;
+
+#[cfg(target_os = "macos")]
+use winit::platform::macos::WindowAttributesExtMacOS;
 
 enum RenderState {
     Uninitialized,
@@ -48,6 +51,10 @@ pub struct GuiApp {
 
 impl GuiApp {
     pub fn new(event_proxy: EventLoopProxy<UserEvent>, config: Config) -> Self {
+        let mut cell_metrics = CellMetrics::default();
+        cell_metrics.padding_x = PADDING as f64;
+        cell_metrics.padding_y = PADDING_TOP as f64;
+
         Self {
             window: None,
             event_proxy,
@@ -58,7 +65,7 @@ impl GuiApp {
             current_rows: DEFAULT_ROWS,
             modifiers: Modifiers::default(),
             mouse_state: MouseState::new(),
-            cell_metrics: CellMetrics::default(),
+            cell_metrics,
             editor_state: EditorState::new(DEFAULT_COLS as usize, DEFAULT_ROWS as usize),
             render_state: RenderState::Uninitialized,
         }
@@ -68,12 +75,20 @@ impl GuiApp {
         let (cell_width, cell_height) =
             (self.cell_metrics.cell_width, self.cell_metrics.cell_height);
         let width = DEFAULT_COLS as u32 * cell_width as u32 + 2 * PADDING;
-        let height = DEFAULT_ROWS as u32 * cell_height as u32 + 2 * PADDING;
+        let height = DEFAULT_ROWS as u32 * cell_height as u32 + PADDING + PADDING_TOP;
 
-        let window_attrs = WindowAttributes::default()
+        let mut window_attrs = WindowAttributes::default()
             .with_title("gui.nvim")
             .with_inner_size(LogicalSize::new(width, height))
             .with_min_inner_size(LogicalSize::new(200, 100));
+
+        #[cfg(target_os = "macos")]
+        {
+            window_attrs = window_attrs
+                .with_titlebar_transparent(true)
+                .with_fullsize_content_view(true)
+                .with_title_hidden(true);
+        }
 
         match event_loop.create_window(window_attrs) {
             Ok(window) => {
@@ -156,7 +171,8 @@ impl GuiApp {
 
     fn calculate_grid_size(&self, width: u32, height: u32) -> (u64, u64) {
         let cols = (width.saturating_sub(2 * PADDING)) as f64 / self.cell_metrics.cell_width;
-        let rows = (height.saturating_sub(2 * PADDING)) as f64 / self.cell_metrics.cell_height;
+        let rows =
+            (height.saturating_sub(PADDING + PADDING_TOP)) as f64 / self.cell_metrics.cell_height;
         (cols.max(1.0) as u64, rows.max(1.0) as u64)
     }
 
@@ -235,7 +251,7 @@ impl GuiApp {
 
     fn do_render(&mut self) {
         if let RenderState::Ready(ref mut renderer) = self.render_state {
-            match renderer.render(&self.editor_state) {
+            match renderer.render(&self.editor_state, PADDING as f32, PADDING_TOP as f32) {
                 Ok(()) => {}
                 Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
                     if let Some(ref window) = self.window {

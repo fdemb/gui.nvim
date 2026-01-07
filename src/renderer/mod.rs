@@ -85,9 +85,20 @@ impl Renderer {
         self.default_bg = u32_to_linear_rgba(bg);
     }
 
-    pub fn render(&mut self, state: &EditorState) -> Result<(), wgpu::SurfaceError> {
-        self.grid_renderer
-            .prepare(&self.ctx, state, self.default_bg, self.default_fg);
+    pub fn render(
+        &mut self,
+        state: &EditorState,
+        x_offset: f32,
+        y_offset: f32,
+    ) -> Result<(), wgpu::SurfaceError> {
+        self.grid_renderer.prepare(
+            &self.ctx,
+            state,
+            self.default_bg,
+            self.default_fg,
+            x_offset,
+            y_offset,
+        );
 
         self.atlas_bind_group = self.pipeline.create_atlas_bind_group(
             &self.ctx,

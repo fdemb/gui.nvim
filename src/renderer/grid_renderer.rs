@@ -66,10 +66,12 @@ impl GridRenderer {
         state: &EditorState,
         default_bg: [f32; 4],
         default_fg: [f32; 4],
+        x_offset: f32,
+        y_offset: f32,
     ) {
         self.batcher.clear();
-        self.prepare_grid_cells(ctx, state, default_bg, default_fg);
-        self.prepare_cursor(ctx, state, default_bg, default_fg);
+        self.prepare_grid_cells(ctx, state, default_bg, default_fg, x_offset, y_offset);
+        self.prepare_cursor(ctx, state, default_bg, default_fg, x_offset, y_offset);
         self.batcher.upload(ctx);
     }
 
@@ -79,12 +81,14 @@ impl GridRenderer {
         state: &EditorState,
         default_bg: [f32; 4],
         default_fg: [f32; 4],
+        x_offset: f32,
+        y_offset: f32,
     ) {
         let grid = state.main_grid();
         let highlights = &state.highlights;
 
         for (row_idx, row_cells) in grid.rows().enumerate() {
-            let y = row_idx as f32 * self.cell_height;
+            let y = row_idx as f32 * self.cell_height + y_offset;
 
             let mut last_hl_id = u64::MAX;
             let mut last_bg = default_bg;
@@ -101,7 +105,7 @@ impl GridRenderer {
                     last_fg = fg;
                 }
 
-                let x = col_idx as f32 * self.cell_width;
+                let x = col_idx as f32 * self.cell_width + x_offset;
 
                 self.push_cell_background(x, y, last_bg, default_bg);
                 self.push_cell_glyph(ctx, x, y, cell, last_attrs, last_fg);
@@ -253,6 +257,8 @@ impl GridRenderer {
         state: &EditorState,
         default_bg: [f32; 4],
         default_fg: [f32; 4],
+        x_offset: f32,
+        y_offset: f32,
     ) {
         let cursor = &state.cursor;
         if !cursor.visible {
@@ -271,7 +277,7 @@ impl GridRenderer {
             return;
         }
 
-        let geom = compute_cursor_geometry(
+        let mut geom = compute_cursor_geometry(
             mode.cursor_shape,
             cursor.row,
             cursor.col,
@@ -279,6 +285,9 @@ impl GridRenderer {
             self.cell_height,
             mode.cell_percentage,
         );
+
+        geom.x += x_offset;
+        geom.y += y_offset;
 
         let cursor_color = if mode.attr_id > 0 {
             if let Some(fg) = state.highlights.get(mode.attr_id).foreground {

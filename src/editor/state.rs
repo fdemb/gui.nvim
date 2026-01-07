@@ -4,6 +4,7 @@ use super::grid::Grid;
 #[cfg(test)]
 use super::highlight::StyleFlags;
 use super::highlight::{Color, HighlightAttributes, HighlightMap};
+use crate::bridge::ui::RedrawEvent;
 
 /// Cursor shape as defined by Neovim's mode_info_set.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -256,6 +257,63 @@ impl EditorState {
         self.cursor.blink_visible != old_visible
     }
 
+    /// Process a RedrawEvent to update the editor state.
+    pub fn handle_redraw_event(&mut self, event: &RedrawEvent) {
+        match event {
+            RedrawEvent::GridResize {
+                grid,
+                width,
+                height,
+            } => {
+                self.grid_resize(*grid, *width, *height);
+            }
+            RedrawEvent::GridClear { grid } => {
+                self.grid_clear(*grid);
+            }
+            RedrawEvent::GridLine {
+                grid,
+                row,
+                col_start,
+                cells,
+            } => {
+                let cells: Vec<(String, Option<u64>, usize)> = cells
+                    .iter()
+                    .map(|c| (c.text.clone(), c.hl_id, c.repeat))
+                    .collect();
+                self.grid_line(*grid, *row, *col_start, &cells);
+            }
+            RedrawEvent::GridScroll {
+                grid,
+                top,
+                bot,
+                left,
+                right,
+                rows,
+            } => {
+                self.grid_scroll(*grid, *top, *bot, *left, *right, *rows);
+            }
+            RedrawEvent::GridCursorGoto { grid, row, col } => {
+                self.grid_cursor_goto(*grid, *row, *col);
+            }
+            RedrawEvent::HlAttrDefine { id, attrs } => {
+                self.hl_attr_define(*id, attrs.clone());
+            }
+            RedrawEvent::DefaultColorsSet { fg, bg, sp } => {
+                self.default_colors_set(*fg, *bg, *sp);
+            }
+            RedrawEvent::ModeInfoSet { modes, .. } => {
+                self.mode_info_set(modes.clone());
+            }
+            RedrawEvent::ModeChange { mode, mode_idx } => {
+                self.mode_change(mode, *mode_idx);
+            }
+            RedrawEvent::Flush => {
+                self.flush();
+            }
+            _ => {}
+        }
+    }
+
     /// Handles a flush event (marks end of a batch of updates).
     pub fn flush(&mut self) {
         // Currently a no-op, but could trigger a render request
@@ -447,5 +505,33 @@ mod tests {
         // 260 + 150 = 410 -> should be hidden
         state.update_blink(410);
         assert!(!state.cursor.blink_visible);
+    }
+
+    #[test]
+    fn test_handle_redraw_event() {
+        let mut state = EditorState::new(80, 24);
+
+        // Resize
+        state.handle_redraw_event(&RedrawEvent::GridResize {
+            grid: 1,
+            width: 10,
+            height: 10,
+        });
+        assert_eq!(state.main_grid().width(), 10);
+
+        // Line update
+        use crate::bridge::ui::GridCell;
+        let cells = vec![GridCell {
+            text: "A".into(),
+            hl_id: Some(1),
+            repeat: 1,
+        }];
+        state.handle_redraw_event(&RedrawEvent::GridLine {
+            grid: 1,
+            row: 0,
+            col_start: 0,
+            cells,
+        });
+        assert_eq!(state.main_grid()[(0, 0)].text, "A");
     }
 }

@@ -85,18 +85,16 @@ impl GuiApp {
         let width = DEFAULT_COLS as u32 * cell_width as u32 + 2 * PADDING;
         let height = DEFAULT_ROWS as u32 * cell_height as u32 + PADDING + PADDING_TOP;
 
-        let mut window_attrs = WindowAttributes::default()
+        let window_attrs = WindowAttributes::default()
             .with_title("gui.nvim")
             .with_inner_size(LogicalSize::new(width, height))
             .with_min_inner_size(LogicalSize::new(200, 100));
 
         #[cfg(target_os = "macos")]
-        {
-            window_attrs = window_attrs
-                .with_titlebar_transparent(true)
-                .with_fullsize_content_view(true)
-                .with_title_hidden(true);
-        }
+        let window_attrs = window_attrs
+            .with_titlebar_transparent(true)
+            .with_fullsize_content_view(true)
+            .with_title_hidden(true);
 
         match event_loop.create_window(window_attrs) {
             Ok(window) => {
@@ -187,124 +185,70 @@ impl GuiApp {
         (cols.max(1.0) as u64, rows.max(1.0) as u64)
     }
 
+    fn handle_option_set(&mut self, name: &str, value: &nvim_rs::Value) {
+        if name == "guifont" {
+            if let Some(s) = value.as_str() {
+                if let Some(font_settings) = crate::config::FontSettings::from_guifont(s) {
+                    log::info!("Updating font: {:?}", font_settings);
+
+                    if let Some(f) = font_settings.family {
+                        self.config.font.family = Some(f);
+                    }
+                    if let Some(s) = font_settings.size {
+                        self.config.font.size = Some(s);
+                    }
+
+                    if let RenderState::Ready(ref mut renderer) = self.render_state {
+                        if let Some(window) = &self.window {
+                            let scale_factor = window.scale_factor();
+                            if let Err(e) = renderer.update_font(&self.config, scale_factor) {
+                                log::error!("Failed to update font: {}", e);
+                            } else {
+                                let (cw, ch) = renderer.cell_size();
+                                self.cell_metrics.cell_width = cw as f64;
+                                self.cell_metrics.cell_height = ch as f64;
+
+                                // Resize grid
+                                let size = window.inner_size();
+                                let (cols, rows) =
+                                    self.calculate_grid_size(size.width, size.height);
+                                if cols != self.current_cols || rows != self.current_rows {
+                                    self.current_cols = cols;
+                                    self.current_rows = rows;
+                                    if let Some(ref bridge) = self.app_bridge {
+                                        bridge.resize(cols, rows);
+                                    }
+                                }
+
+                                // Request redraw
+                                window.request_redraw();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     fn apply_redraw_events(&mut self, events: Vec<RedrawEvent>) {
         for event in events {
+            self.editor_state.handle_redraw_event(&event);
+
             match event {
-                RedrawEvent::GridResize {
-                    grid,
-                    width,
-                    height,
-                } => {
-                    self.editor_state.grid_resize(grid, width, height);
-                }
-                RedrawEvent::GridClear { grid } => {
-                    self.editor_state.grid_clear(grid);
-                }
-                RedrawEvent::GridLine {
-                    grid,
-                    row,
-                    col_start,
-                    cells,
-                } => {
-                    let cells: Vec<(String, Option<u64>, usize)> = cells
-                        .into_iter()
-                        .map(|c| (c.text, c.hl_id, c.repeat))
-                        .collect();
-                    self.editor_state.grid_line(grid, row, col_start, &cells);
-                }
-                RedrawEvent::GridScroll {
-                    grid,
-                    top,
-                    bot,
-                    left,
-                    right,
-                    rows,
-                } => {
-                    self.editor_state
-                        .grid_scroll(grid, top, bot, left, right, rows);
-                }
-                RedrawEvent::GridCursorGoto { grid, row, col } => {
-                    self.editor_state.grid_cursor_goto(grid, row, col);
-                }
-                RedrawEvent::GridDestroy { .. } => {}
-                RedrawEvent::HlAttrDefine { id, attrs } => {
-                    self.editor_state.hl_attr_define(id, attrs);
-                }
-                RedrawEvent::HlGroupSet { .. } => {}
-                RedrawEvent::DefaultColorsSet { fg, bg, sp } => {
-                    self.editor_state.default_colors_set(fg, bg, sp);
+                RedrawEvent::DefaultColorsSet { fg, bg, .. } => {
                     if let RenderState::Ready(ref mut renderer) = self.render_state {
                         renderer.update_default_colors(fg, bg);
                     }
-                }
-                RedrawEvent::ModeInfoSet { modes, .. } => {
-                    self.editor_state.mode_info_set(modes);
-                }
-                RedrawEvent::ModeChange { mode, mode_idx } => {
-                    self.editor_state.mode_change(&mode, mode_idx);
                 }
                 RedrawEvent::SetTitle { title } => {
                     if let Some(ref window) = self.window {
                         window.set_title(&title);
                     }
                 }
-                RedrawEvent::SetIcon { .. } => {}
                 RedrawEvent::OptionSet { name, value } => {
-                    if name == "guifont" {
-                        if let Some(s) = value.as_str() {
-                            if let Some(font_settings) =
-                                crate::config::FontSettings::from_guifont(s)
-                            {
-                                log::info!("Updating font: {:?}", font_settings);
-
-                                if let Some(f) = font_settings.family {
-                                    self.config.font.family = Some(f);
-                                }
-                                if let Some(s) = font_settings.size {
-                                    self.config.font.size = Some(s);
-                                }
-
-                                if let RenderState::Ready(ref mut renderer) = self.render_state {
-                                    if let Some(window) = &self.window {
-                                        let scale_factor = window.scale_factor();
-                                        if let Err(e) =
-                                            renderer.update_font(&self.config, scale_factor)
-                                        {
-                                            log::error!("Failed to update font: {}", e);
-                                        } else {
-                                            let (cw, ch) = renderer.cell_size();
-                                            self.cell_metrics.cell_width = cw as f64;
-                                            self.cell_metrics.cell_height = ch as f64;
-
-                                            // Resize grid
-                                            let size = window.inner_size();
-                                            let (cols, rows) =
-                                                self.calculate_grid_size(size.width, size.height);
-                                            if cols != self.current_cols
-                                                || rows != self.current_rows
-                                            {
-                                                self.current_cols = cols;
-                                                self.current_rows = rows;
-                                                if let Some(ref bridge) = self.app_bridge {
-                                                    bridge.resize(cols, rows);
-                                                }
-                                            }
-
-                                            // Request redraw
-                                            window.request_redraw();
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    self.handle_option_set(&name, &value);
                 }
-                RedrawEvent::Flush => {
-                    self.editor_state.flush();
-                }
-                RedrawEvent::Busy { .. } => {}
-                RedrawEvent::MouseOn => {}
-                RedrawEvent::MouseOff => {}
+                _ => {}
             }
         }
     }

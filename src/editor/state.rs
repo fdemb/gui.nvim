@@ -4,7 +4,7 @@ use super::grid::Grid;
 #[cfg(test)]
 use super::highlight::StyleFlags;
 use super::highlight::{Color, HighlightAttributes, HighlightMap};
-use crate::bridge::ui::RedrawEvent;
+use crate::bridge::events::RedrawEvent;
 
 /// Cursor shape as defined by Neovim's mode_info_set.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -520,7 +520,7 @@ mod tests {
         assert_eq!(state.main_grid().width(), 10);
 
         // Line update
-        use crate::bridge::ui::GridCell;
+        use crate::bridge::events::GridCell;
         let cells = vec![GridCell {
             text: "A".into(),
             hl_id: Some(1),

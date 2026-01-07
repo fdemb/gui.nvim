@@ -6,7 +6,7 @@ use winit::event::{ElementState, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoopProxy};
 use winit::window::{Window, WindowAttributes, WindowId};
 
-use crate::bridge::ui::RedrawEvent;
+use crate::bridge::events::RedrawEvent;
 use crate::bridge::AppBridge;
 use crate::config::Config;
 use crate::constants::{DEFAULT_COLS, DEFAULT_ROWS, PADDING, PADDING_TOP};

@@ -3,7 +3,7 @@ use winit::dpi::PhysicalSize;
 use winit::event::KeyEvent;
 use winit::window::Window;
 
-use crate::bridge::ui::RedrawEvent;
+use crate::bridge::events::RedrawEvent;
 
 #[derive(Debug, Clone)]
 pub enum UserEvent {

@@ -1,4 +1,4 @@
-use gui_nvim::bridge::ui::{GridCell, RedrawEvent};
+use gui_nvim::bridge::events::{GridCell, RedrawEvent};
 use gui_nvim::editor::{CursorShape, EditorState};
 
 #[test]

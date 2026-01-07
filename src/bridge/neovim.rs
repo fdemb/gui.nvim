@@ -2,7 +2,8 @@ use async_trait::async_trait;
 use nvim_rs::{Handler, Neovim, Value};
 use winit::event_loop::EventLoopProxy;
 
-use super::ui::{parse_redraw, RedrawEvent};
+use super::events::RedrawEvent;
+use super::parser::parse_redraw;
 use super::NvimWriter;
 use crate::event::{NeovimEvent, UserEvent};
 

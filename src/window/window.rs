@@ -74,6 +74,11 @@ impl GuiApp {
         }
     }
 
+    fn update_padding(&mut self, scale_factor: f64) {
+        self.cell_metrics.padding_x = (PADDING as f64 * scale_factor).round();
+        self.cell_metrics.padding_y = (PADDING_TOP as f64 * scale_factor).round();
+    }
+
     fn create_window(&mut self, event_loop: &ActiveEventLoop) {
         let (cell_width, cell_height) =
             (self.cell_metrics.cell_width, self.cell_metrics.cell_height);
@@ -96,6 +101,7 @@ impl GuiApp {
         match event_loop.create_window(window_attrs) {
             Ok(window) => {
                 log::info!("Window created: {:?}", window.id());
+                self.update_padding(window.scale_factor());
                 let window = Arc::new(window);
                 self.window = Some(window.clone());
                 self.render_state = RenderState::Initializing(Box::pin(Renderer::new(
@@ -173,9 +179,11 @@ impl GuiApp {
     }
 
     fn calculate_grid_size(&self, width: u32, height: u32) -> (u64, u64) {
-        let cols = (width.saturating_sub(2 * PADDING)) as f64 / self.cell_metrics.cell_width;
-        let rows =
-            (height.saturating_sub(PADDING + PADDING_TOP)) as f64 / self.cell_metrics.cell_height;
+        let cols = (width as f64 - 2.0 * self.cell_metrics.padding_x).max(0.0)
+            / self.cell_metrics.cell_width;
+        let rows = (height as f64 - (self.cell_metrics.padding_y + self.cell_metrics.padding_x))
+            .max(0.0)
+            / self.cell_metrics.cell_height;
         (cols.max(1.0) as u64, rows.max(1.0) as u64)
     }
 
@@ -303,7 +311,11 @@ impl GuiApp {
 
     fn do_render(&mut self) {
         if let RenderState::Ready(ref mut renderer) = self.render_state {
-            match renderer.render(&self.editor_state, PADDING as f32, PADDING_TOP as f32) {
+            match renderer.render(
+                &self.editor_state,
+                self.cell_metrics.padding_x as f32,
+                self.cell_metrics.padding_y as f32,
+            ) {
                 Ok(()) => {}
                 Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
                     if let Some(ref window) = self.window {
@@ -474,6 +486,7 @@ impl ApplicationHandler<UserEvent> for GuiApp {
 
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
                 log::debug!("Scale factor changed: {}", scale_factor);
+                self.update_padding(scale_factor);
                 let _ = self
                     .event_proxy
                     .send_event(UserEvent::GUI(GUIEvent::ScaleFactorChanged(scale_factor)));
@@ -507,7 +520,34 @@ impl ApplicationHandler<UserEvent> for GuiApp {
                     window.request_redraw();
                 }
             }
-            UserEvent::GUI(_) => {}
+            UserEvent::GUI(event) => match event {
+                GUIEvent::ScaleFactorChanged(scale_factor) => {
+                    if let RenderState::Ready(ref mut renderer) = self.render_state {
+                        if let Err(e) = renderer.update_font(&self.config, scale_factor) {
+                            log::error!("Failed to update font on scale change: {}", e);
+                        } else {
+                            let (cw, ch) = renderer.cell_size();
+                            self.cell_metrics.cell_width = cw as f64;
+                            self.cell_metrics.cell_height = ch as f64;
+
+                            if let Some(ref window) = self.window {
+                                let size = window.inner_size();
+                                let (cols, rows) =
+                                    self.calculate_grid_size(size.width, size.height);
+                                if cols != self.current_cols || rows != self.current_rows {
+                                    self.current_cols = cols;
+                                    self.current_rows = rows;
+                                    if let Some(ref bridge) = self.app_bridge {
+                                        bridge.resize(cols, rows);
+                                    }
+                                }
+                                window.request_redraw();
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            },
         }
     }
 

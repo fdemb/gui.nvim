@@ -12,8 +12,9 @@ use crate::config::Config;
 use crate::constants::{DEFAULT_COLS, DEFAULT_ROWS, PADDING, PADDING_TOP};
 use crate::editor::EditorState;
 use crate::event::{GUIEvent, NeovimEvent, UserEvent};
-use crate::input::{CellMetrics, InputHandler};
+use crate::input::InputHandler;
 use crate::window::render_loop::RenderLoop;
+use crate::window::settings::WindowSettings;
 
 #[cfg(target_os = "macos")]
 use winit::platform::macos::WindowAttributesExtMacOS;
@@ -25,20 +26,14 @@ pub struct GuiApp {
     args: Vec<String>,
     app_bridge: Option<AppBridge>,
     close_requested: bool,
-    current_cols: u64,
-    current_rows: u64,
     input_handler: InputHandler,
-    cell_metrics: CellMetrics,
     editor_state: EditorState,
     render_loop: RenderLoop,
+    settings: WindowSettings,
 }
 
 impl GuiApp {
     pub fn new(event_proxy: EventLoopProxy<UserEvent>, config: Config, args: Vec<String>) -> Self {
-        let mut cell_metrics = CellMetrics::default();
-        cell_metrics.padding_x = PADDING as f64;
-        cell_metrics.padding_y = PADDING_TOP as f64;
-
         Self {
             window: None,
             event_proxy,
@@ -46,23 +41,22 @@ impl GuiApp {
             args,
             app_bridge: None,
             close_requested: false,
-            current_cols: DEFAULT_COLS,
-            current_rows: DEFAULT_ROWS,
             input_handler: InputHandler::new(),
-            cell_metrics,
             editor_state: EditorState::new(DEFAULT_COLS as usize, DEFAULT_ROWS as usize),
             render_loop: RenderLoop::new(),
+            settings: WindowSettings::new(),
         }
     }
 
     fn update_padding(&mut self, scale_factor: f64) {
-        self.cell_metrics.padding_x = (PADDING as f64 * scale_factor).round();
-        self.cell_metrics.padding_y = (PADDING_TOP as f64 * scale_factor).round();
+        self.settings.update_padding(scale_factor);
     }
 
     fn create_window(&mut self, event_loop: &ActiveEventLoop) {
-        let (cell_width, cell_height) =
-            (self.cell_metrics.cell_width, self.cell_metrics.cell_height);
+        let (cell_width, cell_height) = (
+            self.settings.cell_metrics.cell_width,
+            self.settings.cell_metrics.cell_height,
+        );
         let width = DEFAULT_COLS as u32 * cell_width as u32 + 2 * PADDING;
         let height = DEFAULT_ROWS as u32 * cell_height as u32 + PADDING + PADDING_TOP;
 
@@ -103,16 +97,16 @@ impl GuiApp {
     }
 
     fn update_metrics_and_resize(&mut self, cw: f32, ch: f32) {
-        self.cell_metrics.cell_width = cw as f64;
-        self.cell_metrics.cell_height = ch as f64;
+        self.settings.cell_metrics.cell_width = cw as f64;
+        self.settings.cell_metrics.cell_height = ch as f64;
 
         if let Some(ref bridge) = self.app_bridge {
             if let Some(ref window) = self.window {
                 let size = window.inner_size();
-                let (cols, rows) = self.calculate_grid_size(size.width, size.height);
-                if cols != self.current_cols || rows != self.current_rows {
-                    self.current_cols = cols;
-                    self.current_rows = rows;
+                let (cols, rows) = self.settings.calculate_grid_size(size.width, size.height);
+                if cols != self.settings.cols || rows != self.settings.rows {
+                    self.settings.cols = cols;
+                    self.settings.rows = rows;
                     bridge.resize(cols, rows);
                 }
             }
@@ -124,22 +118,13 @@ impl GuiApp {
             use std::task::Poll;
             if let Poll::Ready(Ok(renderer)) = self.render_loop.poll(window) {
                 let (cw, ch) = renderer.cell_size();
-                if self.cell_metrics.cell_width != cw as f64
-                    || self.cell_metrics.cell_height != ch as f64
+                if self.settings.cell_metrics.cell_width != cw as f64
+                    || self.settings.cell_metrics.cell_height != ch as f64
                 {
                     self.update_metrics_and_resize(cw, ch);
                 }
             }
         }
-    }
-
-    fn calculate_grid_size(&self, width: u32, height: u32) -> (u64, u64) {
-        let cols = (width as f64 - 2.0 * self.cell_metrics.padding_x).max(0.0)
-            / self.cell_metrics.cell_width;
-        let rows = (height as f64 - (self.cell_metrics.padding_y + self.cell_metrics.padding_x))
-            .max(0.0)
-            / self.cell_metrics.cell_height;
-        (cols.max(1.0) as u64, rows.max(1.0) as u64)
     }
 
     fn update_layout(&mut self, scale_factor: f64) {
@@ -206,8 +191,8 @@ impl GuiApp {
         if let Some(window) = &self.window {
             if let Err(_) = self.render_loop.render(
                 &self.editor_state,
-                self.cell_metrics.padding_x as f32,
-                self.cell_metrics.padding_y as f32,
+                self.settings.cell_metrics.padding_x as f32,
+                self.settings.cell_metrics.padding_y as f32,
                 window,
             ) {
                 if self.render_loop.renderer().is_none() {
@@ -256,10 +241,10 @@ impl ApplicationHandler<UserEvent> for GuiApp {
                         renderer.resize(size);
                     }
 
-                    let (cols, rows) = self.calculate_grid_size(size.width, size.height);
-                    if cols != self.current_cols || rows != self.current_rows {
-                        self.current_cols = cols;
-                        self.current_rows = rows;
+                    let (cols, rows) = self.settings.calculate_grid_size(size.width, size.height);
+                    if cols != self.settings.cols || rows != self.settings.rows {
+                        self.settings.cols = cols;
+                        self.settings.rows = rows;
                         if let Some(ref bridge) = self.app_bridge {
                             bridge.resize(cols, rows);
                         }
@@ -300,8 +285,11 @@ impl ApplicationHandler<UserEvent> for GuiApp {
 
             WindowEvent::CursorMoved { position, .. } => {
                 if let Some(ref bridge) = self.app_bridge {
-                    self.input_handler
-                        .handle_cursor_moved(position, &self.cell_metrics, bridge);
+                    self.input_handler.handle_cursor_moved(
+                        position,
+                        &self.settings.cell_metrics,
+                        bridge,
+                    );
                 }
             }
 
@@ -393,9 +381,9 @@ mod tests {
 
     #[test]
     fn test_default_dimensions() {
-        let cell_metrics = CellMetrics::default();
-        let width = DEFAULT_COLS as u32 * cell_metrics.cell_width as u32 + 2 * PADDING;
-        let height = DEFAULT_ROWS as u32 * cell_metrics.cell_height as u32 + 2 * PADDING;
+        let settings = WindowSettings::new();
+        let width = DEFAULT_COLS as u32 * settings.cell_metrics.cell_width as u32 + 2 * PADDING;
+        let height = DEFAULT_ROWS as u32 * settings.cell_metrics.cell_height as u32 + 2 * PADDING;
         assert!(width > 0);
         assert!(height > 0);
     }

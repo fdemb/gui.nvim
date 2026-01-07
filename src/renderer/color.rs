@@ -4,6 +4,12 @@
 /// expect linear colors as input (they auto-convert linear→sRGB on output).
 /// These utilities handle the necessary conversions.
 
+/// Default background color (approx #1E1E1E)
+pub const DEFAULT_BG_COLOR: u32 = 0x1E1E1E;
+
+/// Default foreground color (approx #D4D4D4)
+pub const DEFAULT_FG_COLOR: u32 = 0xD4D4D4;
+
 /// Convert sRGB color component to linear space.
 /// The GPU will convert back to sRGB when writing to the framebuffer.
 #[inline]

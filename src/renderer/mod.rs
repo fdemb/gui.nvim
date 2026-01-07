@@ -9,7 +9,7 @@ mod pipeline;
 pub use context::{GpuContext, GpuContextError};
 pub use grid_renderer::GridRendererError;
 
-use color::{srgb_to_linear, u32_to_linear_rgba};
+use color::{u32_to_linear_rgba, DEFAULT_BG_COLOR, DEFAULT_FG_COLOR};
 use grid_renderer::GridRenderer;
 use pipeline::RenderPipeline;
 
@@ -43,19 +43,9 @@ impl Renderer {
             grid_renderer.atlas().sampler(),
         );
 
-        // Default colors in linear space (converted from sRGB #1E1E1E and #D4D4D4)
-        let default_bg = [
-            srgb_to_linear(0.118),
-            srgb_to_linear(0.118),
-            srgb_to_linear(0.118),
-            1.0,
-        ];
-        let default_fg = [
-            srgb_to_linear(0.831),
-            srgb_to_linear(0.831),
-            srgb_to_linear(0.831),
-            1.0,
-        ];
+        // Default colors in linear space
+        let default_bg = u32_to_linear_rgba(DEFAULT_BG_COLOR);
+        let default_fg = u32_to_linear_rgba(DEFAULT_FG_COLOR);
 
         Ok(Self {
             ctx,

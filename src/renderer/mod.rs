@@ -19,6 +19,7 @@ use std::sync::Arc;
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
+use crate::config::Config;
 use crate::editor::EditorState;
 
 pub struct Renderer {
@@ -31,10 +32,10 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub async fn new(window: Arc<Window>) -> Result<Self, RendererError> {
+    pub async fn new(window: Arc<Window>, config: Config) -> Result<Self, RendererError> {
         let scale_factor = window.scale_factor();
         let ctx = GpuContext::new(window).await?;
-        let grid_renderer = GridRenderer::new(&ctx, scale_factor)?;
+        let grid_renderer = GridRenderer::new(&ctx, &config.font, scale_factor)?;
         let (cell_width, cell_height) = grid_renderer.cell_size();
         let pipeline = RenderPipeline::new(&ctx, cell_width, cell_height);
 

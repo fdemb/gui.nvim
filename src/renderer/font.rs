@@ -6,6 +6,8 @@ use crossfont::{
     Rasterizer, Size, Slant, Style, Weight,
 };
 
+use crate::config::FontSettings;
+
 /// Font configuration with fallback chain.
 pub struct FontConfig {
     pub family: String,
@@ -14,10 +16,10 @@ pub struct FontConfig {
 }
 
 impl FontConfig {
-    pub fn with_scale_factor(scale_factor: f64) -> Self {
+    pub fn new(settings: &FontSettings, scale_factor: f64) -> Self {
         Self {
-            family: default_font_family(),
-            size_pt: 14.0,
+            family: settings.family.clone().unwrap_or_else(default_font_family),
+            size_pt: settings.size.unwrap_or(14.0),
             scale_factor: scale_factor as f32,
         }
     }
@@ -307,6 +309,31 @@ pub enum FontError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::FontSettings;
+
+    #[test]
+    fn test_font_config_from_settings() {
+        let settings = FontSettings {
+            family: Some("Test Font".to_string()),
+            size: Some(18.0),
+        };
+        let config = FontConfig::new(&settings, 2.0);
+
+        assert_eq!(config.family, "Test Font");
+        assert_eq!(config.size_pt, 18.0);
+        assert_eq!(config.scale_factor, 2.0);
+        assert_eq!(config.scaled_size(), 36.0);
+    }
+
+    #[test]
+    fn test_font_config_defaults() {
+        let settings = FontSettings::default();
+        let config = FontConfig::new(&settings, 1.0);
+
+        assert!(!config.family.is_empty()); // Should use platform default
+        assert_eq!(config.size_pt, 14.0);
+        assert_eq!(config.scale_factor, 1.0);
+    }
 
     #[test]
     fn test_default_font_config() {

@@ -1,5 +1,6 @@
 mod app;
 mod bridge;
+mod config;
 mod editor;
 mod env;
 mod event;
@@ -111,7 +112,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     event_loop.set_control_flow(ControlFlow::Wait);
 
     let proxy = event_loop.create_proxy();
-    let mut app = GuiApp::new(proxy);
+    let config = config::Config::load();
+    let mut app = GuiApp::new(proxy, config);
 
     info!("Starting event loop");
     event_loop.run_app(&mut app)?;

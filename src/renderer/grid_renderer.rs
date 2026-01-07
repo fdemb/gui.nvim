@@ -5,6 +5,7 @@ use super::batch::RenderBatcher;
 use super::color::u32_to_linear_rgba;
 use super::font::FontSystem;
 use super::GpuContext;
+use crate::config::FontSettings;
 use crate::editor::{
     Cell, CursorShape, EditorState, HighlightAttributes, StyleFlags, UnderlineStyle,
 };
@@ -19,8 +20,12 @@ pub struct GridRenderer {
 }
 
 impl GridRenderer {
-    pub fn new(ctx: &GpuContext, scale_factor: f64) -> Result<Self, GridRendererError> {
-        let font_config = super::font::FontConfig::with_scale_factor(scale_factor);
+    pub fn new(
+        ctx: &GpuContext,
+        font_settings: &FontSettings,
+        scale_factor: f64,
+    ) -> Result<Self, GridRendererError> {
+        let font_config = super::font::FontConfig::new(font_settings, scale_factor);
         let mut font_system = FontSystem::new(&font_config)?;
 
         let cell_width = font_system.cell_width();

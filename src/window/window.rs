@@ -8,6 +8,7 @@ use winit::window::{Window, WindowAttributes, WindowId};
 use crate::app::{AppBridge, PADDING};
 use crate::bridge::ui::RedrawEvent;
 use crate::bridge::{DEFAULT_COLS, DEFAULT_ROWS};
+use crate::config::Config;
 use crate::editor::EditorState;
 use crate::event::{GUIEvent, NeovimEvent, UserEvent};
 use crate::input::{
@@ -33,6 +34,7 @@ enum RenderState {
 pub struct GuiApp {
     window: Option<Arc<Window>>,
     event_proxy: EventLoopProxy<UserEvent>,
+    config: Config,
     app_bridge: Option<AppBridge>,
     close_requested: bool,
     current_cols: u64,
@@ -45,10 +47,11 @@ pub struct GuiApp {
 }
 
 impl GuiApp {
-    pub fn new(event_proxy: EventLoopProxy<UserEvent>) -> Self {
+    pub fn new(event_proxy: EventLoopProxy<UserEvent>, config: Config) -> Self {
         Self {
             window: None,
             event_proxy,
+            config,
             app_bridge: None,
             close_requested: false,
             current_cols: DEFAULT_COLS,
@@ -77,9 +80,10 @@ impl GuiApp {
                 log::info!("Window created: {:?}", window.id());
                 let window = Arc::new(window);
                 self.window = Some(window.clone());
-
-                self.render_state =
-                    RenderState::Initializing(Box::pin(Renderer::new(window.clone())));
+                self.render_state = RenderState::Initializing(Box::pin(Renderer::new(
+                    window.clone(),
+                    self.config.clone(),
+                )));
 
                 let bridge = AppBridge::new(self.event_proxy.clone());
                 bridge.spawn_neovim();

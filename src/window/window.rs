@@ -13,24 +13,10 @@ use crate::constants::{DEFAULT_COLS, DEFAULT_ROWS, PADDING, PADDING_TOP};
 use crate::editor::EditorState;
 use crate::event::{GUIEvent, NeovimEvent, UserEvent};
 use crate::input::{CellMetrics, InputHandler};
-use crate::renderer::Renderer;
+use crate::window::render_loop::RenderLoop;
 
 #[cfg(target_os = "macos")]
 use winit::platform::macos::WindowAttributesExtMacOS;
-
-enum RenderState {
-    Uninitialized,
-    Initializing(
-        std::pin::Pin<
-            Box<
-                dyn std::future::Future<Output = Result<Renderer, crate::renderer::RendererError>>
-                    + Send,
-            >,
-        >,
-    ),
-    Ready(Renderer),
-    Failed,
-}
 
 pub struct GuiApp {
     window: Option<Arc<Window>>,
@@ -44,7 +30,7 @@ pub struct GuiApp {
     input_handler: InputHandler,
     cell_metrics: CellMetrics,
     editor_state: EditorState,
-    render_state: RenderState,
+    render_loop: RenderLoop,
 }
 
 impl GuiApp {
@@ -65,7 +51,7 @@ impl GuiApp {
             input_handler: InputHandler::new(),
             cell_metrics,
             editor_state: EditorState::new(DEFAULT_COLS as usize, DEFAULT_ROWS as usize),
-            render_state: RenderState::Uninitialized,
+            render_loop: RenderLoop::new(),
         }
     }
 
@@ -97,10 +83,9 @@ impl GuiApp {
                 self.update_padding(window.scale_factor());
                 let window = Arc::new(window);
                 self.window = Some(window.clone());
-                self.render_state = RenderState::Initializing(Box::pin(Renderer::new(
-                    window.clone(),
-                    self.config.clone(),
-                )));
+
+                self.render_loop
+                    .initialize(window.clone(), self.config.clone());
 
                 let bridge = AppBridge::new(self.event_proxy.clone());
                 bridge.spawn_neovim(self.args.clone());
@@ -117,58 +102,35 @@ impl GuiApp {
         }
     }
 
-    fn poll_renderer(&mut self) {
-        let render_state = std::mem::replace(&mut self.render_state, RenderState::Uninitialized);
+    fn update_metrics_and_resize(&mut self, cw: f32, ch: f32) {
+        self.cell_metrics.cell_width = cw as f64;
+        self.cell_metrics.cell_height = ch as f64;
 
-        self.render_state = match render_state {
-            RenderState::Initializing(mut future) => {
-                use std::sync::Arc;
-                use std::task::{Context, Poll, Wake, Waker};
-
-                struct NoopWaker;
-                impl Wake for NoopWaker {
-                    fn wake(self: Arc<Self>) {}
-                }
-
-                let waker = Waker::from(Arc::new(NoopWaker));
-                let mut cx = Context::from_waker(&waker);
-
-                match future.as_mut().poll(&mut cx) {
-                    Poll::Ready(Ok(renderer)) => {
-                        log::info!("GPU renderer initialized");
-                        let (cw, ch) = renderer.cell_size();
-                        self.cell_metrics.cell_width = cw as f64;
-                        self.cell_metrics.cell_height = ch as f64;
-
-                        if let Some(ref bridge) = self.app_bridge {
-                            if let Some(ref window) = self.window {
-                                let size = window.inner_size();
-                                let (cols, rows) =
-                                    self.calculate_grid_size(size.width, size.height);
-                                if cols != self.current_cols || rows != self.current_rows {
-                                    self.current_cols = cols;
-                                    self.current_rows = rows;
-                                    bridge.resize(cols, rows);
-                                }
-                            }
-                        }
-
-                        RenderState::Ready(renderer)
-                    }
-                    Poll::Ready(Err(e)) => {
-                        log::error!("Failed to initialize renderer: {}", e);
-                        RenderState::Failed
-                    }
-                    Poll::Pending => {
-                        if let Some(ref window) = self.window {
-                            window.request_redraw();
-                        }
-                        RenderState::Initializing(future)
-                    }
+        if let Some(ref bridge) = self.app_bridge {
+            if let Some(ref window) = self.window {
+                let size = window.inner_size();
+                let (cols, rows) = self.calculate_grid_size(size.width, size.height);
+                if cols != self.current_cols || rows != self.current_rows {
+                    self.current_cols = cols;
+                    self.current_rows = rows;
+                    bridge.resize(cols, rows);
                 }
             }
-            other => other,
-        };
+        }
+    }
+
+    fn poll_renderer(&mut self) {
+        if let Some(ref window) = self.window {
+            use std::task::Poll;
+            if let Poll::Ready(Ok(renderer)) = self.render_loop.poll(window) {
+                let (cw, ch) = renderer.cell_size();
+                if self.cell_metrics.cell_width != cw as f64
+                    || self.cell_metrics.cell_height != ch as f64
+                {
+                    self.update_metrics_and_resize(cw, ch);
+                }
+            }
+        }
     }
 
     fn calculate_grid_size(&self, width: u32, height: u32) -> (u64, u64) {
@@ -181,24 +143,14 @@ impl GuiApp {
     }
 
     fn update_layout(&mut self, scale_factor: f64) {
-        if let RenderState::Ready(ref mut renderer) = self.render_state {
+        if let Some(renderer) = self.render_loop.renderer() {
             if let Err(e) = renderer.update_font(&self.config, scale_factor) {
                 log::error!("Failed to update font: {}", e);
             } else {
                 let (cw, ch) = renderer.cell_size();
-                self.cell_metrics.cell_width = cw as f64;
-                self.cell_metrics.cell_height = ch as f64;
+                self.update_metrics_and_resize(cw, ch);
 
                 if let Some(ref window) = self.window {
-                    let size = window.inner_size();
-                    let (cols, rows) = self.calculate_grid_size(size.width, size.height);
-                    if cols != self.current_cols || rows != self.current_rows {
-                        self.current_cols = cols;
-                        self.current_rows = rows;
-                        if let Some(ref bridge) = self.app_bridge {
-                            bridge.resize(cols, rows);
-                        }
-                    }
                     window.request_redraw();
                 }
             }
@@ -233,7 +185,7 @@ impl GuiApp {
 
             match event {
                 RedrawEvent::DefaultColorsSet { fg, bg, .. } => {
-                    if let RenderState::Ready(ref mut renderer) = self.render_state {
+                    if let Some(renderer) = self.render_loop.renderer() {
                         renderer.update_default_colors(fg, bg);
                     }
                 }
@@ -251,24 +203,18 @@ impl GuiApp {
     }
 
     fn do_render(&mut self) {
-        if let RenderState::Ready(ref mut renderer) = self.render_state {
-            match renderer.render(
+        if let Some(window) = &self.window {
+            if let Err(_) = self.render_loop.render(
                 &self.editor_state,
                 self.cell_metrics.padding_x as f32,
                 self.cell_metrics.padding_y as f32,
+                window,
             ) {
-                Ok(()) => {}
-                Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
-                    if let Some(ref window) = self.window {
-                        renderer.resize(window.inner_size());
-                    }
-                }
-                Err(wgpu::SurfaceError::OutOfMemory) => {
-                    log::error!("Out of GPU memory");
+                if self.render_loop.renderer().is_none() {
+                    // Failed or not ready, nothing to do
+                } else {
+                    // Out of memory was logged in render_loop
                     self.close_requested = true;
-                }
-                Err(e) => {
-                    log::warn!("Render error: {:?}", e);
                 }
             }
         }
@@ -306,7 +252,7 @@ impl ApplicationHandler<UserEvent> for GuiApp {
                 if size.width > 0 && size.height > 0 {
                     log::debug!("Window resized: {}x{}", size.width, size.height);
 
-                    if let RenderState::Ready(ref mut renderer) = self.render_state {
+                    if let Some(renderer) = self.render_loop.renderer() {
                         renderer.resize(size);
                     }
 

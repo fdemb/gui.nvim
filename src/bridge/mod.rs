@@ -7,4 +7,3 @@ mod process;
 pub use command::AppBridge;
 pub use neovim::NeovimHandler;
 pub use process::{NeovimProcess, NvimWriter};
-

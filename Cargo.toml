@@ -27,6 +27,7 @@ crossfont = "0.9"
 
 # Text shaping
 harfbuzz_rs = "2.0"
+harfbuzz-sys = "0.5"
 
 # Utilities
 ahash = "0.8"

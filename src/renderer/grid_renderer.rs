@@ -351,10 +351,8 @@ impl GridRenderer {
     }
 }
 
-
 #[derive(Debug, thiserror::Error)]
 pub enum GridRendererError {
     #[error("Font error: {0}")]
     Font(#[from] super::font::FontError),
 }
-

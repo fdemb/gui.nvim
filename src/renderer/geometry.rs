@@ -288,4 +288,3 @@ mod tests {
         assert!(geom.lines.is_empty());
     }
 }
-

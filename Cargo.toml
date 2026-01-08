@@ -22,8 +22,11 @@ winit = "0.30.12"
 wgpu = "28.0.0"
 bytemuck = { version = "1", features = ["derive"] }
 
-# Font rasterization
+# Font rasterization (legacy - to be removed after harfbuzz migration)
 crossfont = "0.9"
+
+# Text shaping
+harfbuzz_rs = "2.0"
 
 # Utilities
 ahash = "0.8"
@@ -35,10 +38,18 @@ serde = { version = "1.0.228", features = ["derive"] }
 toml = "0.9.10"
 
 [target.'cfg(target_os = "macos")'.dependencies]
+# Legacy crates (to be removed after objc2 migration)
 core-foundation = "0.10.0"
 core-text = "21.0.0"
 core-graphics = "0.24.0"
 foreign-types = "0.5"
+
+# Modern objc2 ecosystem
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSString", "NSData", "NSArray"] }
+objc2-core-foundation = { version = "0.3", features = ["CFData"] }
+objc2-core-text = { version = "0.3", features = ["CTFont", "CTFontManager", "CTFontDescriptor", "objc2-core-graphics"] }
+objc2-core-graphics = { version = "0.3", features = ["CGFont", "CGDataProvider", "CGContext", "CGBitmapContext", "CGColorSpace", "CGPath", "libc"] }
 
 [profile.dev]
 opt-level = 1

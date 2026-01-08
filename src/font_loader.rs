@@ -1,49 +1,63 @@
 #[cfg(target_os = "macos")]
 mod macos {
-    use core_foundation::base::CFTypeRef;
-    use core_foundation::error::CFErrorRef;
-    use core_graphics::data_provider::CGDataProvider;
-    use core_graphics::font::CGFont;
-    use foreign_types::ForeignType;
-    use std::sync::{Arc, Once};
+    use objc2_core_foundation::{CFData, CFError, CFRetained};
+    use objc2_core_graphics::{CGDataProvider, CGFont};
+    use objc2_core_text::CTFontManagerRegisterGraphicsFont;
+    use std::ptr::{self, NonNull};
+    use std::sync::Once;
 
     static REGISTER_FONTS: Once = Once::new();
-
-    #[link(name = "CoreText", kind = "framework")]
-    extern "C" {
-        fn CTFontManagerRegisterGraphicsFont(font: CFTypeRef, error: *mut CFErrorRef) -> bool;
-    }
 
     pub fn register_embedded_fonts() {
         REGISTER_FONTS.call_once(|| {
             log::info!("Registering embedded fonts...");
-            let font_data = include_bytes!("../assets/fonts/SymbolsNerdFont-Regular.ttf");
 
-            // Create data provider from the embedded bytes
-            // We need to wrap it in Arc for CGDataProvider
-            let provider = CGDataProvider::from_buffer(Arc::new(font_data));
+            static FONT_DATA: &[u8] = include_bytes!("../assets/fonts/SymbolsNerdFont-Regular.ttf");
 
-            // Create CGFont from the provider
-            let font = match CGFont::from_data_provider(provider) {
-                Ok(f) => f,
-                Err(_) => {
+            let cf_data = CFData::from_static_bytes(FONT_DATA);
+
+            let provider = CGDataProvider::with_cf_data(Some(&cf_data));
+
+            let provider = match provider {
+                Some(p) => p,
+                None => {
+                    log::error!("Failed to create CGDataProvider from embedded data");
+                    return;
+                }
+            };
+
+            let font = CGFont::with_data_provider(&provider);
+
+            let font = match font {
+                Some(f) => f,
+                None => {
                     log::error!("Failed to create CGFont from embedded data");
                     return;
                 }
             };
 
-            // Register the font with the system (for this process)
-            let mut error: CFErrorRef = std::ptr::null_mut();
+            // CTFontManagerRegisterGraphicsFont is deprecated but still functional.
+            // The recommended alternatives (CTFontManagerCreateFontDescriptorsFromData,
+            // CTFontManagerRegisterFontsForURL) require more setup for embedded fonts.
+            #[allow(deprecated)]
             let success = unsafe {
-                // CGFont typically exposes as_ptr() to get the underlying CGFontRef
-                CTFontManagerRegisterGraphicsFont(font.as_ptr() as CFTypeRef, &mut error)
+                let mut error: *mut CFError = ptr::null_mut();
+                let result = CTFontManagerRegisterGraphicsFont(&font, &mut error);
+                if !result && !error.is_null() {
+                    let error_retained: CFRetained<CFError> =
+                        CFRetained::from_raw(NonNull::new_unchecked(error));
+                    log::error!(
+                        "Failed to register embedded font 'Symbols Nerd Font': {}",
+                        error_retained
+                    );
+                }
+                result
             };
 
-            if !success {
-                // TODO: Convert CFErrorRef to something readable if needed
-                log::error!("Failed to register embedded font 'Symbols Nerd Font'");
-            } else {
+            if success {
                 log::info!("Successfully registered embedded font: Symbols Nerd Font");
+            } else {
+                log::error!("Failed to register embedded font 'Symbols Nerd Font'");
             }
         });
     }
@@ -78,7 +92,6 @@ mod tests {
 
     #[test]
     fn test_register_embedded_fonts_no_panic() {
-        // This should run without panicking
         register_embedded_fonts();
     }
 }

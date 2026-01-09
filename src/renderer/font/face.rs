@@ -55,6 +55,7 @@ impl Drop for HbFontWrapper {
 }
 
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
 pub struct FaceMetrics {
     pub cell_width: f32,
     pub cell_height: f32,
@@ -197,6 +198,7 @@ impl Face {
         self.size_px
     }
 
+    #[allow(dead_code)]
     pub fn has_color(&self) -> bool {
         self.has_color
     }
@@ -364,6 +366,7 @@ impl Face {
         GlyphBuffer::Rgb(rgb)
     }
 
+    #[allow(dead_code)]
     pub fn create_for_string(&self, text: &str) -> CFRetained<CTFont> {
         let cf_string = CFString::from_str(text);
         let range = CFRange::new(0, text.chars().count() as isize);

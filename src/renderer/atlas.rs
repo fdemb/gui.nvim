@@ -1,8 +1,8 @@
 use crossfont::{FontKey, GlyphKey, Size};
 
 use super::font::{
-    CachedGlyph, Collection, CollectionIndex, FontSystem, GlyphBuffer, GlyphCache, GlyphCacheKey,
-    RasterizedGlyph, ShapedCachedGlyph, ShapedGlyphCache,
+    CachedGlyph, Collection, FontSystem, GlyphBuffer, GlyphCache, GlyphCacheKey, RasterizedGlyph,
+    ShapedCachedGlyph, ShapedGlyphCache,
 };
 use super::GpuContext;
 
@@ -367,7 +367,7 @@ impl GlyphAtlas {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::renderer::font::Style;
+    use crate::renderer::font::{CollectionIndex, Style};
 
     #[test]
     fn test_atlas_allocation_simple() {

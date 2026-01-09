@@ -19,10 +19,12 @@ impl Style {
         }
     }
 
+    #[allow(dead_code)]
     pub fn is_bold(&self) -> bool {
         matches!(self, Style::Bold | Style::BoldItalic)
     }
 
+    #[allow(dead_code)]
     pub fn is_italic(&self) -> bool {
         matches!(self, Style::Italic | Style::BoldItalic)
     }
@@ -46,6 +48,7 @@ impl CollectionIndex {
 
 struct Entry {
     face: Face,
+    #[allow(dead_code)]
     is_fallback: bool,
 }
 
@@ -56,7 +59,9 @@ pub struct Collection {
     italic: Vec<Entry>,
     bold_italic: Vec<Entry>,
     metrics: FaceMetrics,
+    #[allow(dead_code)]
     size_pt: f32,
+    #[allow(dead_code)]
     dpi: f32,
     fallback_resolver: FallbackResolver,
 }
@@ -110,11 +115,13 @@ impl Collection {
         entries.get(index.idx as usize).map(|e| &e.face)
     }
 
+    #[allow(dead_code)]
     pub fn get_face_mut(&mut self, index: CollectionIndex) -> Option<&mut Face> {
         let entries = self.entries_for_style_mut(index.style);
         entries.get_mut(index.idx as usize).map(|e| &mut e.face)
     }
 
+    #[allow(dead_code)]
     pub fn primary_face(&self, style: Style) -> &Face {
         let entries = self.entries_for_style(style);
         &entries[0].face
@@ -152,6 +159,7 @@ impl Collection {
         None
     }
 
+    #[allow(dead_code)]
     pub fn add_fallback(&mut self, style: Style, face: Face) -> CollectionIndex {
         let entries = self.entries_for_style_mut(style);
         let idx = entries.len() as u16;
@@ -180,6 +188,7 @@ impl Collection {
         }
     }
 
+    #[allow(dead_code)]
     pub fn clear_fallback_cache(&mut self) {
         self.fallback_resolver.clear_cache();
     }

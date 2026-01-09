@@ -3,7 +3,9 @@ use crossfont::Size;
 use super::atlas::GlyphAtlas;
 use super::batch::RenderBatcher;
 use super::color::u32_to_linear_rgba;
-use super::font::FontSystem;
+#[cfg(target_os = "macos")]
+use super::font::{Collection, GlyphCacheKey, RunIterator, ShapedGlyph, Shaper, Style, TextRun};
+use super::font::{FontConfig, FontSystem};
 use super::geometry::{compute_cursor_geometry, compute_decoration_geometry};
 use super::GpuContext;
 use crate::config::FontSettings;
@@ -15,9 +17,15 @@ pub struct GridRenderer {
     batcher: RenderBatcher,
     atlas: GlyphAtlas,
     font_system: FontSystem,
+    #[cfg(target_os = "macos")]
+    collection: Collection,
+    #[cfg(target_os = "macos")]
+    shaper: Shaper,
     cell_width: f32,
     cell_height: f32,
     font_size: Size,
+    #[cfg(target_os = "macos")]
+    descent: f32,
 }
 
 impl GridRenderer {
@@ -26,7 +34,7 @@ impl GridRenderer {
         font_settings: &FontSettings,
         scale_factor: f64,
     ) -> Result<Self, GridRendererError> {
-        let font_config = super::font::FontConfig::new(font_settings, scale_factor);
+        let font_config = FontConfig::new(font_settings, scale_factor);
         let mut font_system = FontSystem::new(&font_config)?;
 
         let cell_width = font_system.cell_width();
@@ -38,13 +46,29 @@ impl GridRenderer {
 
         let batcher = RenderBatcher::new(ctx);
 
+        #[cfg(target_os = "macos")]
+        let (collection, shaper, descent) = {
+            let dpi = 72.0 * scale_factor as f32;
+            let mut collection = Collection::new(&font_config.family, font_config.size_pt, dpi)?;
+            let shaper = Shaper::new();
+            let descent = collection.metrics().descent;
+            atlas.prepopulate_ascii_shaped(ctx, &mut collection, Style::Regular);
+            (collection, shaper, descent)
+        };
+
         Ok(Self {
             batcher,
             atlas,
             font_system,
+            #[cfg(target_os = "macos")]
+            collection,
+            #[cfg(target_os = "macos")]
+            shaper,
             cell_width,
             cell_height,
             font_size,
+            #[cfg(target_os = "macos")]
+            descent,
         })
     }
 
@@ -54,7 +78,7 @@ impl GridRenderer {
         font_settings: &FontSettings,
         scale_factor: f64,
     ) -> Result<(), GridRendererError> {
-        let font_config = super::font::FontConfig::new(font_settings, scale_factor);
+        let font_config = FontConfig::new(font_settings, scale_factor);
         let mut font_system = FontSystem::new(&font_config)?;
 
         let cell_width = font_system.cell_width();
@@ -64,6 +88,17 @@ impl GridRenderer {
         self.atlas.clear(ctx);
         self.atlas
             .prepopulate_ascii(ctx, &mut font_system, font_size);
+
+        #[cfg(target_os = "macos")]
+        {
+            let dpi = 72.0 * scale_factor as f32;
+            let mut collection = Collection::new(&font_config.family, font_config.size_pt, dpi)?;
+            self.shaper = Shaper::new();
+            self.descent = collection.metrics().descent;
+            self.atlas
+                .prepopulate_ascii_shaped(ctx, &mut collection, Style::Regular);
+            self.collection = collection;
+        }
 
         self.font_system = font_system;
         self.cell_width = cell_width;
@@ -110,6 +145,134 @@ impl GridRenderer {
         x_offset: f32,
         y_offset: f32,
     ) {
+        #[cfg(target_os = "macos")]
+        {
+            self.prepare_grid_cells_shaped(ctx, state, default_bg, default_fg, x_offset, y_offset);
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            self.prepare_grid_cells_legacy(ctx, state, default_bg, default_fg, x_offset, y_offset);
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    fn prepare_grid_cells_shaped(
+        &mut self,
+        ctx: &GpuContext,
+        state: &EditorState,
+        default_bg: [f32; 4],
+        default_fg: [f32; 4],
+        x_offset: f32,
+        y_offset: f32,
+    ) {
+        let grid = state.main_grid();
+        let highlights = &state.highlights;
+
+        for (row_idx, row_cells) in grid.rows().enumerate() {
+            let y = row_idx as f32 * self.cell_height + y_offset;
+
+            // First pass: backgrounds and decorations (cell by cell)
+            let mut last_hl_id = u64::MAX;
+            let mut last_bg = default_bg;
+            let mut last_fg = default_fg;
+            let mut last_attrs = highlights.get(0);
+
+            for (col_idx, cell) in row_cells.iter().enumerate() {
+                if cell.highlight_id != last_hl_id {
+                    last_hl_id = cell.highlight_id;
+                    last_attrs = highlights.get(last_hl_id);
+                    let (bg, fg) = self.resolve_colors(last_attrs, default_bg, default_fg);
+                    last_bg = bg;
+                    last_fg = fg;
+                }
+
+                let x = col_idx as f32 * self.cell_width + x_offset;
+                self.push_cell_background(x, y, last_bg, default_bg);
+                self.push_cell_decorations(x, y, last_attrs, last_fg);
+            }
+
+            // Second pass: text runs with shaping
+            for run in RunIterator::new(row_cells, highlights) {
+                if run.is_empty() {
+                    continue;
+                }
+
+                let attrs = highlights.get(run.highlight_id);
+                let (_, fg) = self.resolve_colors(attrs, default_bg, default_fg);
+
+                let text_run = TextRun {
+                    text: &run.text,
+                    style: run.style,
+                };
+
+                let shaped = self.shaper.shape_with_collection(&text_run, &mut self.collection);
+                let run_x = run.start_col as f32 * self.cell_width + x_offset;
+
+                self.push_shaped_run(ctx, run_x, y, &shaped, fg);
+            }
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    fn push_shaped_run(
+        &mut self,
+        ctx: &GpuContext,
+        run_x: f32,
+        y: f32,
+        shaped: &[ShapedGlyph],
+        fg: [f32; 4],
+    ) {
+        let mut x = run_x;
+        let baseline_y = y + self.cell_height - self.descent.abs();
+
+        for glyph in shaped {
+            let key = GlyphCacheKey::new(glyph.glyph_id, glyph.font_index);
+
+            if let Some(cached) = self.atlas.get_glyph_by_id(ctx, &self.collection, key) {
+                if cached.width > 0 && cached.height > 0 {
+                    let atlas_size = self.atlas.atlas_size() as f32;
+                    let uv_x = cached.atlas_x as f32 / atlas_size;
+                    let uv_y = cached.atlas_y as f32 / atlas_size;
+                    let uv_w = cached.width as f32 / atlas_size;
+                    let uv_h = cached.height as f32 / atlas_size;
+
+                    // Apply HarfBuzz offsets (in 26.6 fixed-point)
+                    let x_offset = (glyph.x_offset >> 6) as f32;
+                    let y_offset = (glyph.y_offset >> 6) as f32;
+
+                    let glyph_x = x + x_offset + cached.bearing_x as f32;
+                    let glyph_y = baseline_y - y_offset - cached.bearing_y as f32;
+
+                    self.batcher.push_glyph(
+                        glyph_x,
+                        glyph_y,
+                        cached.width as f32,
+                        cached.height as f32,
+                        uv_x,
+                        uv_y,
+                        uv_w,
+                        uv_h,
+                        fg,
+                        cached.is_colored,
+                    );
+                }
+            }
+
+            // Advance by the shaped x_advance (26.6 fixed-point)
+            x += (glyph.x_advance >> 6) as f32;
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn prepare_grid_cells_legacy(
+        &mut self,
+        ctx: &GpuContext,
+        state: &EditorState,
+        default_bg: [f32; 4],
+        default_fg: [f32; 4],
+        x_offset: f32,
+        y_offset: f32,
+    ) {
         let grid = state.main_grid();
         let highlights = &state.highlights;
 
@@ -122,7 +285,6 @@ impl GridRenderer {
             let mut last_attrs = highlights.get(0);
 
             for (col_idx, cell) in row_cells.iter().enumerate() {
-                // Cache color resolution
                 if cell.highlight_id != last_hl_id {
                     last_hl_id = cell.highlight_id;
                     last_attrs = highlights.get(last_hl_id);
@@ -355,4 +517,7 @@ impl GridRenderer {
 pub enum GridRendererError {
     #[error("Font error: {0}")]
     Font(#[from] super::font::FontError),
+    #[cfg(target_os = "macos")]
+    #[error("Face error: {0}")]
+    Face(#[from] super::font::FaceError),
 }

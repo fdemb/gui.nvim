@@ -8,6 +8,7 @@ pub struct ShapedGlyph {
     pub glyph_id: u32,
     pub cluster: u32,
     pub x_advance: i32,
+    #[allow(dead_code)]
     pub y_advance: i32,
     pub x_offset: i32,
     pub y_offset: i32,
@@ -59,6 +60,7 @@ impl HbBuffer {
         unsafe { harfbuzz_sys::hb_buffer_guess_segment_properties(self.ptr) };
     }
 
+    #[allow(dead_code)]
     fn get_length(&self) -> u32 {
         unsafe { harfbuzz_sys::hb_buffer_get_length(self.ptr) }
     }
@@ -123,6 +125,7 @@ impl Shaper {
         }
     }
 
+    #[allow(dead_code)]
     pub fn with_features(feature_strings: &[&str]) -> Self {
         let mut features = Self::default_features();
         for feature_str in feature_strings {
@@ -145,6 +148,7 @@ impl Shaper {
         }
     }
 
+    #[allow(dead_code)]
     fn parse_feature(s: &str) -> Option<harfbuzz_sys::hb_feature_t> {
         let bytes = s.as_bytes();
         if bytes.len() < 4 {
@@ -178,6 +182,7 @@ impl Shaper {
     }
 
     #[cfg(target_os = "macos")]
+    #[allow(dead_code)]
     pub fn shape(&mut self, run: &TextRun, collection: &Collection) -> Vec<ShapedGlyph> {
         let face = collection.primary_face(run.style);
         self.shape_with_face(run, face, CollectionIndex::primary(run.style))

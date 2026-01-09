@@ -48,6 +48,7 @@ pub struct CachedGlyph {
 
 impl CachedGlyph {
     /// Creates an empty cached glyph (for glyphs with no visual representation).
+    #[allow(dead_code)]
     pub fn empty() -> Self {
         Self {
             atlas_x: 0,
@@ -90,6 +91,7 @@ impl ShapedGlyphCache {
     }
 
     /// Checks if the cache contains an entry for the given key.
+    #[allow(dead_code)]
     pub fn contains(&self, key: &GlyphCacheKey) -> bool {
         self.cache.contains_key(key)
     }

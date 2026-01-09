@@ -136,10 +136,12 @@ impl FallbackResolver {
         )
     }
 
+    #[allow(dead_code)]
     pub fn clear_cache(&mut self) {
         self.cache.clear();
     }
 
+    #[allow(dead_code)]
     pub fn update_base_font(&mut self, base_font: CFRetained<CTFont>, size_px: f32) {
         self.base_font = base_font;
         if (self.size_px - size_px).abs() > 0.01 {

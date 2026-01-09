@@ -163,6 +163,22 @@ pub struct Face {
     has_color: bool,
 }
 
+impl Clone for Face {
+    fn clone(&self) -> Self {
+        // Clone the CTFont and create a new HarfBuzz font from it.
+        let ct_font = self.ct_font.clone();
+        let hb_font = HbFontWrapper::from_ct_font(&ct_font, self.size_px)
+            .expect("Failed to create HarfBuzz font for cloned Face");
+        Self {
+            ct_font,
+            hb_font,
+            metrics: self.metrics,
+            size_px: self.size_px,
+            has_color: self.has_color,
+        }
+    }
+}
+
 impl Face {
     pub fn new(name: &str, size_pt: f32, dpi: f32) -> Result<Self, FaceError> {
         let cf_name = CFString::from_str(name);
@@ -174,8 +190,8 @@ impl Face {
     }
 
     pub fn from_ct_font(ct_font: CFRetained<CTFont>, size_px: f32) -> Result<Self, FaceError> {
-        let hb_font =
-            HbFontWrapper::from_ct_font(&ct_font, size_px).ok_or(FaceError::HarfBuzzFaceCreation)?;
+        let hb_font = HbFontWrapper::from_ct_font(&ct_font, size_px)
+            .ok_or(FaceError::HarfBuzzFaceCreation)?;
         let metrics = Self::compute_metrics(&ct_font, size_px);
 
         let traits = unsafe { ct_font.symbolic_traits() };
@@ -311,8 +327,35 @@ impl Face {
             )
         };
 
-        let width = rect.size.width.ceil() as usize;
-        let height = rect.size.height.ceil() as usize;
+        // If the bounding rect is too small, return an empty glyph.
+        if rect.size.width < 0.25 || rect.size.height < 0.25 {
+            return Ok(RasterizedGlyph {
+                character: '\0',
+                width: 0,
+                height: 0,
+                bearing_x: 0,
+                bearing_y: 0,
+                buffer: GlyphBuffer::Rgba(Vec::new()),
+            });
+        }
+
+        // Calculate integer pixel bearings using floor() consistently.
+        // These represent the whole-pixel offset from the origin to the glyph.
+        let bearing_x = rect.origin.x.floor() as i32;
+        let bearing_y = (rect.origin.y + rect.size.height).floor() as i32;
+
+        // Calculate the fractional part of the position. We will bake this
+        // sub-pixel offset into the rasterized glyph by translating the
+        // drawing context before rendering. This ensures consistent visual
+        // positioning when glyphs are placed at integer pixel coordinates.
+        let frac_x = rect.origin.x - rect.origin.x.floor();
+        let frac_y = rect.origin.y - rect.origin.y.floor();
+
+        // Expand the canvas to account for the fractional offset.
+        // The glyph may extend slightly beyond the original bounding box
+        // dimensions when rendered at the sub-pixel offset.
+        let width = (rect.size.width + frac_x).ceil() as usize;
+        let height = (rect.size.height + frac_y).ceil() as usize;
 
         if width == 0 || height == 0 {
             return Ok(RasterizedGlyph {
@@ -325,10 +368,8 @@ impl Face {
             });
         }
 
-        let (buffer, is_color) = self.render_to_buffer(glyph, rect, width, height)?;
-
-        let bearing_x = rect.origin.x.floor() as i32;
-        let bearing_y = (rect.origin.y + rect.size.height).ceil() as i32;
+        let (buffer, is_color) =
+            self.render_to_buffer_subpixel(glyph, rect, width, height, frac_x, frac_y)?;
 
         Ok(RasterizedGlyph {
             character: '\0',
@@ -344,12 +385,20 @@ impl Face {
         })
     }
 
-    fn render_to_buffer(
+    /// Render a glyph to a buffer with sub-pixel positioning.
+    ///
+    /// The `frac_x` and `frac_y` parameters specify the fractional pixel offset
+    /// to apply during rasterization. This offset is baked into the rendered bitmap
+    /// so that when the glyph is positioned at integer pixel coordinates, it appears
+    /// at the correct visual position with sub-pixel precision.
+    fn render_to_buffer_subpixel(
         &self,
         glyph: CGGlyph,
         rect: CGRect,
         width: usize,
         height: usize,
+        frac_x: f64,
+        frac_y: f64,
     ) -> Result<(Vec<u8>, bool), FaceError> {
         let is_color = self.has_color;
         let bytes_per_pixel = if is_color { 4 } else { 1 };
@@ -390,7 +439,14 @@ impl Face {
         CGContext::set_allows_antialiasing(Some(&context), true);
         CGContext::set_should_antialias(Some(&context), true);
         CGContext::set_should_smooth_fonts(Some(&context), true);
+
+        // Enable sub-pixel positioning for precise glyph placement.
+        CGContext::set_allows_font_subpixel_positioning(Some(&context), true);
         CGContext::set_should_subpixel_position_fonts(Some(&context), true);
+
+        // Disable sub-pixel quantization to maintain precise positioning.
+        CGContext::set_allows_font_subpixel_quantization(Some(&context), false);
+        CGContext::set_should_subpixel_quantize_fonts(Some(&context), false);
 
         if is_color {
             CGContext::set_rgb_fill_color(Some(&context), 1.0, 1.0, 1.0, 1.0);
@@ -398,6 +454,15 @@ impl Face {
             CGContext::set_gray_fill_color(Some(&context), 1.0, 1.0);
         }
 
+        // Apply the fractional offset via context translation.
+        // This bakes the sub-pixel position into the rasterized glyph,
+        // ensuring consistent visual positioning when placed at integer coordinates.
+        CGContext::translate_ctm(Some(&context), frac_x, frac_y);
+
+        // Draw the glyph at the negative of the bounding box origin.
+        // Combined with the fractional translation above, this places the glyph
+        // so that its visual position is correct when the bitmap is displayed
+        // at the integer bearing coordinates.
         let positions = [CGPoint::new(-rect.origin.x, -rect.origin.y)];
         let glyphs = [glyph];
 

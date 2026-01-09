@@ -46,7 +46,9 @@ impl FallbackResolver {
 
     pub fn discover(&mut self, codepoint: u32) -> Option<Face> {
         if let Some(cached) = self.cache.get(&codepoint) {
-            return cached.as_ref().and_then(|c| self.load_face_by_name(&c.font_name));
+            return cached
+                .as_ref()
+                .and_then(|c| self.load_face_by_name(&c.font_name));
         }
 
         let result = self.discover_uncached(codepoint);
@@ -98,7 +100,8 @@ impl FallbackResolver {
 
     fn load_face_by_name(&self, name: &str) -> Option<Face> {
         let cf_name = CFString::from_str(name);
-        let ct_font = unsafe { CTFont::with_name(&cf_name, self.size_px as CGFloat, std::ptr::null()) };
+        let ct_font =
+            unsafe { CTFont::with_name(&cf_name, self.size_px as CGFloat, std::ptr::null()) };
         Face::from_ct_font(ct_font, self.size_px).ok()
     }
 

@@ -99,14 +99,18 @@ const HB_FEATURE_GLOBAL_END: u32 = u32::MAX;
 pub struct Shaper {
     buffer: HbBuffer,
     features: Vec<harfbuzz_sys::hb_feature_t>,
+    /// Features with ligatures disabled, used for cursor rendering.
+    features_no_ligatures: Vec<harfbuzz_sys::hb_feature_t>,
 }
 
 impl Shaper {
     pub fn new() -> Self {
         let features = Self::default_features();
+        let features_no_ligatures = Self::no_ligature_features();
         Self {
             buffer: HbBuffer::new().expect("Failed to create HarfBuzz buffer"),
             features,
+            features_no_ligatures,
         }
     }
 
@@ -122,6 +126,7 @@ impl Shaper {
         Self {
             buffer: HbBuffer::new().expect("Failed to create HarfBuzz buffer"),
             features,
+            features_no_ligatures: Self::no_ligature_features(),
         }
     }
 
@@ -152,6 +157,34 @@ impl Shaper {
             harfbuzz_sys::hb_feature_t {
                 tag: make_tag(b'l', b'i', b'g', b'a'),
                 value: 1,
+                start: HB_FEATURE_GLOBAL_START,
+                end: HB_FEATURE_GLOBAL_END,
+            },
+        ]
+    }
+
+    /// Features with ligatures and contextual alternates disabled.
+    /// Used for cursor rendering where we need the standalone glyph.
+    fn no_ligature_features() -> Vec<harfbuzz_sys::hb_feature_t> {
+        vec![
+            // calt - contextual alternates (disabled)
+            harfbuzz_sys::hb_feature_t {
+                tag: make_tag(b'c', b'a', b'l', b't'),
+                value: 0,
+                start: HB_FEATURE_GLOBAL_START,
+                end: HB_FEATURE_GLOBAL_END,
+            },
+            // liga - standard ligatures (disabled)
+            harfbuzz_sys::hb_feature_t {
+                tag: make_tag(b'l', b'i', b'g', b'a'),
+                value: 0,
+                start: HB_FEATURE_GLOBAL_START,
+                end: HB_FEATURE_GLOBAL_END,
+            },
+            // clig - contextual ligatures (disabled)
+            harfbuzz_sys::hb_feature_t {
+                tag: make_tag(b'c', b'l', b'i', b'g'),
+                value: 0,
                 start: HB_FEATURE_GLOBAL_START,
                 end: HB_FEATURE_GLOBAL_END,
             },
@@ -231,11 +264,58 @@ impl Shaper {
         }
     }
 
+    /// Shape text without ligatures. Used for cursor rendering where we need
+    /// the standalone glyph for a single character, not a ligature.
+    pub fn shape_without_ligatures(
+        &mut self,
+        run: &TextRun,
+        collection: &mut Collection,
+    ) -> Vec<ShapedGlyph> {
+        let mut results = Vec::new();
+        let mut remaining_text = run.text;
+        let mut cluster_offset = 0u32;
+
+        while !remaining_text.is_empty() {
+            let (run_text, next_remaining, font_index) =
+                self.find_font_run(remaining_text, run.style, collection);
+
+            if let Some(face) = collection.get_face(font_index) {
+                let sub_run = TextRun {
+                    text: run_text,
+                    style: run.style,
+                };
+
+                let shaped =
+                    self.shape_with_face_and_features(&sub_run, face, font_index, false);
+
+                for mut glyph in shaped {
+                    glyph.cluster += cluster_offset;
+                    results.push(glyph);
+                }
+            }
+
+            cluster_offset += run_text.chars().count() as u32;
+            remaining_text = next_remaining;
+        }
+
+        results
+    }
+
     fn shape_with_face(
         &mut self,
         run: &TextRun,
         face: &Face,
         font_index: CollectionIndex,
+    ) -> Vec<ShapedGlyph> {
+        self.shape_with_face_and_features(run, face, font_index, true)
+    }
+
+    fn shape_with_face_and_features(
+        &mut self,
+        run: &TextRun,
+        face: &Face,
+        font_index: CollectionIndex,
+        use_ligatures: bool,
     ) -> Vec<ShapedGlyph> {
         let hb_font = face.hb_font();
 
@@ -246,13 +326,19 @@ impl Shaper {
             .set_direction(harfbuzz_sys::HB_DIRECTION_LTR);
         self.buffer.guess_segment_properties();
 
-        // Shape
+        // Shape with appropriate features
+        let features = if use_ligatures {
+            &self.features
+        } else {
+            &self.features_no_ligatures
+        };
+
         unsafe {
             harfbuzz_sys::hb_shape(
                 hb_font.as_ptr(),
                 self.buffer.ptr,
-                self.features.as_ptr(),
-                self.features.len() as u32,
+                features.as_ptr(),
+                features.len() as u32,
             );
         }
 

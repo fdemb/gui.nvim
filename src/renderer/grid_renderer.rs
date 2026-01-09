@@ -14,7 +14,9 @@ pub struct GridRenderer {
     shaper: Shaper,
     cell_width: f32,
     cell_height: f32,
-    descent: f32,
+    /// Distance from the top of the cell to the baseline.
+    /// Computed as: ascent + (line_gap / 2) to center text vertically.
+    baseline_offset: f32,
 }
 
 impl GridRenderer {
@@ -31,7 +33,10 @@ impl GridRenderer {
         let metrics = collection.metrics();
         let cell_width = metrics.cell_width;
         let cell_height = metrics.cell_height;
-        let descent = metrics.descent;
+        // Compute baseline offset from top of cell.
+        // We split the line_gap in half to center text vertically within the cell,
+        // matching Ghostty's approach.
+        let baseline_offset = metrics.ascent + (metrics.line_gap / 2.0);
 
         let mut atlas = GlyphAtlas::new(ctx);
         atlas.prepopulate_ascii(ctx, &mut collection, Style::Regular);
@@ -45,7 +50,7 @@ impl GridRenderer {
             shaper,
             cell_width,
             cell_height,
-            descent,
+            baseline_offset,
         })
     }
 
@@ -63,7 +68,7 @@ impl GridRenderer {
         let metrics = collection.metrics();
         self.cell_width = metrics.cell_width;
         self.cell_height = metrics.cell_height;
-        self.descent = metrics.descent;
+        self.baseline_offset = metrics.ascent + (metrics.line_gap / 2.0);
 
         self.atlas.clear(ctx);
         self.atlas.prepopulate_ascii(ctx, &mut collection, Style::Regular);
@@ -161,7 +166,7 @@ impl GridRenderer {
         fg: [f32; 4],
     ) {
         let mut x = run_x;
-        let baseline_y = y + self.cell_height - self.descent.abs();
+        let baseline_y = y + self.baseline_offset;
 
         for glyph in shaped {
             let key = GlyphCacheKey::new(glyph.glyph_id, glyph.font_index);
@@ -174,9 +179,10 @@ impl GridRenderer {
                     let uv_w = cached.width as f32 / atlas_size;
                     let uv_h = cached.height as f32 / atlas_size;
 
-                    // Apply HarfBuzz offsets (in 26.6 fixed-point)
-                    let x_offset = (glyph.x_offset >> 6) as f32;
-                    let y_offset = (glyph.y_offset >> 6) as f32;
+                    // Apply HarfBuzz offsets (in 26.6 fixed-point).
+                    // Use floating-point division to preserve fractional pixels.
+                    let x_offset = glyph.x_offset as f32 / 64.0;
+                    let y_offset = glyph.y_offset as f32 / 64.0;
 
                     let glyph_x = x + x_offset + cached.bearing_x as f32;
                     let glyph_y = baseline_y - y_offset - cached.bearing_y as f32;
@@ -196,8 +202,10 @@ impl GridRenderer {
                 }
             }
 
-            // Advance by the shaped x_advance (26.6 fixed-point)
-            x += (glyph.x_advance >> 6) as f32;
+            // Advance by the shaped x_advance (26.6 fixed-point).
+            // Use floating-point division to preserve sub-pixel precision and
+            // prevent accumulated drift when rendering long runs of text.
+            x += glyph.x_advance as f32 / 64.0;
         }
     }
 
@@ -351,12 +359,15 @@ impl GridRenderer {
                         attrs.style.contains(StyleFlags::ITALIC),
                     );
 
-                    // Use shaped rendering for the cursor character
+                    // Use shaped rendering for the cursor character.
+                    // Disable ligatures so the standalone glyph matches the cell position.
+                    // The cursor background covers the underlying ligature anyway.
                     let text_run = TextRun {
                         text: &c.text,
                         style,
                     };
-                    let shaped = self.shaper.shape_with_collection(&text_run, &mut self.collection);
+                    let shaped =
+                        self.shaper.shape_without_ligatures(&text_run, &mut self.collection);
                     self.push_shaped_run(ctx, geom.x, geom.y, &shaped, text_color);
                 }
             }

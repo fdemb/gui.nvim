@@ -116,7 +116,6 @@ impl Grid {
 
         let mut new_cells = vec![Cell::default(); new_width * new_height];
 
-        // Copy existing cells that fit in the new dimensions
         let copy_width = self.width.min(new_width);
         let copy_height = self.height.min(new_height);
 
@@ -124,7 +123,7 @@ impl Grid {
             let old_start = row * self.width;
             let new_start = row * new_width;
             for col in 0..copy_width {
-                new_cells[new_start + col] = self.cells[old_start + col].clone();
+                new_cells[new_start + col] = std::mem::take(&mut self.cells[old_start + col]);
             }
         }
 
@@ -197,29 +196,29 @@ impl Grid {
         }
 
         if rows > 0 {
-            let rows = rows as usize;
-            for row in top..(bot - rows) {
+            let scroll_rows = rows as usize;
+            for row in top..(bot - scroll_rows) {
                 for col in left..right {
-                    let src_idx = (row + rows) * self.width + col;
+                    let src_idx = (row + scroll_rows) * self.width + col;
                     let dst_idx = row * self.width + col;
-                    self.cells[dst_idx] = self.cells[src_idx].clone();
+                    self.cells.swap(src_idx, dst_idx);
                 }
             }
-            for row in (bot - rows)..bot {
+            for row in (bot - scroll_rows)..bot {
                 for col in left..right {
                     self.cells[row * self.width + col].clear();
                 }
             }
         } else {
-            let rows = (-rows) as usize;
-            for row in ((top + rows)..bot).rev() {
+            let scroll_rows = (-rows) as usize;
+            for row in ((top + scroll_rows)..bot).rev() {
                 for col in left..right {
-                    let src_idx = (row - rows) * self.width + col;
+                    let src_idx = (row - scroll_rows) * self.width + col;
                     let dst_idx = row * self.width + col;
-                    self.cells[dst_idx] = self.cells[src_idx].clone();
+                    self.cells.swap(src_idx, dst_idx);
                 }
             }
-            for row in top..(top + rows) {
+            for row in top..(top + scroll_rows) {
                 for col in left..right {
                     self.cells[row * self.width + col].clear();
                 }

@@ -1,14 +1,9 @@
-#[cfg(target_os = "macos")]
 use objc2_core_foundation::{CFRange, CFRetained, CFString, CGFloat, CGPoint, CGRect};
-#[cfg(target_os = "macos")]
 use objc2_core_graphics::{CGBitmapInfo, CGColorSpace, CGGlyph};
-#[cfg(target_os = "macos")]
 use objc2_core_text::{CTFont, CTFontOrientation, CTFontSymbolicTraits};
 
-#[cfg(target_os = "macos")]
 use std::ptr::{self, NonNull};
 
-#[cfg(target_os = "macos")]
 use crate::config::FontSettings;
 
 /// Rasterized glyph with positioning data.
@@ -43,14 +38,12 @@ impl GlyphBuffer {
 }
 
 /// Font configuration with fallback chain.
-#[cfg(target_os = "macos")]
 pub struct FontConfig {
     pub family: String,
     pub size_pt: f32,
     pub scale_factor: f32,
 }
 
-#[cfg(target_os = "macos")]
 impl FontConfig {
     pub fn new(settings: &FontSettings, scale_factor: f64) -> Self {
         Self {
@@ -66,7 +59,6 @@ impl FontConfig {
     }
 }
 
-#[cfg(target_os = "macos")]
 impl Default for FontConfig {
     fn default() -> Self {
         Self {
@@ -77,17 +69,14 @@ impl Default for FontConfig {
     }
 }
 
-#[cfg(target_os = "macos")]
 fn default_font_family() -> String {
     "Menlo".to_string()
 }
 
-#[cfg(target_os = "macos")]
 pub struct HbFontWrapper {
     ptr: *mut harfbuzz_sys::hb_font_t,
 }
 
-#[cfg(target_os = "macos")]
 mod hb_coretext_ffi {
     use std::ffi::c_void;
 
@@ -96,7 +85,6 @@ mod hb_coretext_ffi {
     }
 }
 
-#[cfg(target_os = "macos")]
 impl HbFontWrapper {
     pub fn from_ct_font(ct_font: &CTFont, size_px: f32) -> Option<Self> {
         let ct_font_ptr = ct_font as *const CTFont as *const std::ffi::c_void;
@@ -117,7 +105,6 @@ impl HbFontWrapper {
     }
 }
 
-#[cfg(target_os = "macos")]
 impl Drop for HbFontWrapper {
     fn drop(&mut self) {
         unsafe {
@@ -168,7 +155,6 @@ pub enum FaceError {
     TableCopyFailed,
 }
 
-#[cfg(target_os = "macos")]
 pub struct Face {
     ct_font: CFRetained<CTFont>,
     hb_font: HbFontWrapper,
@@ -177,7 +163,6 @@ pub struct Face {
     has_color: bool,
 }
 
-#[cfg(target_os = "macos")]
 impl Face {
     pub fn new(name: &str, size_pt: f32, dpi: f32) -> Result<Self, FaceError> {
         let cf_name = CFString::from_str(name);
@@ -447,62 +432,17 @@ impl Face {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
-pub struct Face {
-    _placeholder: (),
-}
-
-#[cfg(not(target_os = "macos"))]
-impl Face {
-    pub fn new(_name: &str, _size_pt: f32, _dpi: f32) -> Result<Self, FaceError> {
-        Err(FaceError::FontNotFound(
-            "Not implemented for this platform".to_string(),
-        ))
-    }
-
-    pub fn metrics(&self) -> &FaceMetrics {
-        static DEFAULT: FaceMetrics = FaceMetrics {
-            cell_width: 8.0,
-            cell_height: 16.0,
-            ascent: 12.0,
-            descent: 4.0,
-            line_gap: 0.0,
-            underline_position: 2.0,
-            underline_thickness: 1.0,
-            strikeout_position: 6.0,
-            strikeout_thickness: 1.0,
-        };
-        &DEFAULT
-    }
-
-    pub fn glyph_index(&self, _codepoint: u32) -> Option<u32> {
-        None
-    }
-
-    pub fn has_codepoint(&self, _codepoint: u32) -> bool {
-        false
-    }
-
-    pub fn render_glyph(&self, _glyph_id: u32) -> Result<RasterizedGlyph, FaceError> {
-        Err(FaceError::FontNotFound(
-            "Not implemented for this platform".to_string(),
-        ))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    #[cfg(target_os = "macos")]
     fn test_face_creation() {
         let face = Face::new("Menlo", 14.0, 72.0);
         assert!(face.is_ok(), "Should create face from system font");
     }
 
     #[test]
-    #[cfg(target_os = "macos")]
     fn test_face_metrics() {
         let face = Face::new("Menlo", 14.0, 72.0).unwrap();
         let metrics = face.metrics();
@@ -513,7 +453,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "macos")]
     fn test_glyph_index() {
         let face = Face::new("Menlo", 14.0, 72.0).unwrap();
 
@@ -525,7 +464,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "macos")]
     fn test_render_glyph() {
         let face = Face::new("Menlo", 14.0, 72.0).unwrap();
         let glyph_id = face.glyph_index('A' as u32).unwrap();

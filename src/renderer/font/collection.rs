@@ -1,5 +1,4 @@
 use super::face::{Face, FaceError, FaceMetrics};
-#[cfg(target_os = "macos")]
 use super::fallback::FallbackResolver;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -53,7 +52,6 @@ struct Entry {
     is_fallback: bool,
 }
 
-#[cfg(target_os = "macos")]
 pub struct Collection {
     regular: Vec<Entry>,
     bold: Vec<Entry>,
@@ -67,7 +65,6 @@ pub struct Collection {
     fallback_resolver: FallbackResolver,
 }
 
-#[cfg(target_os = "macos")]
 impl Collection {
     pub fn new(family: &str, size_pt: f32, dpi: f32) -> Result<Self, FaceError> {
         let regular_face = Face::new(family, size_pt, dpi)?;
@@ -195,44 +192,6 @@ impl Collection {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
-pub struct Collection {
-    metrics: FaceMetrics,
-}
-
-#[cfg(not(target_os = "macos"))]
-impl Collection {
-    pub fn new(_family: &str, _size_pt: f32, _dpi: f32) -> Result<Self, FaceError> {
-        Ok(Self {
-            metrics: FaceMetrics::default(),
-        })
-    }
-
-    pub fn metrics(&self) -> &FaceMetrics {
-        &self.metrics
-    }
-
-    pub fn get_face(&self, _index: CollectionIndex) -> Option<&Face> {
-        None
-    }
-
-    pub fn primary_face(&self, _style: Style) -> &'static Face {
-        unimplemented!("Collection not available on this platform")
-    }
-
-    pub fn resolve_glyph(
-        &mut self,
-        _codepoint: u32,
-        _style: Style,
-    ) -> Option<(CollectionIndex, u32)> {
-        None
-    }
-
-    pub fn add_fallback(&mut self, style: Style, _face: Face) -> CollectionIndex {
-        CollectionIndex::new(style, 0)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -272,14 +231,12 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "macos")]
     fn test_collection_creation() {
         let collection = Collection::new("Menlo", 14.0, 72.0);
         assert!(collection.is_ok(), "Should create collection from system font");
     }
 
     #[test]
-    #[cfg(target_os = "macos")]
     fn test_collection_metrics() {
         let collection = Collection::new("Menlo", 14.0, 72.0).unwrap();
         let metrics = collection.metrics();
@@ -289,7 +246,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "macos")]
     fn test_collection_get_face() {
         let collection = Collection::new("Menlo", 14.0, 72.0).unwrap();
 
@@ -301,7 +257,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "macos")]
     fn test_collection_resolve_glyph() {
         let mut collection = Collection::new("Menlo", 14.0, 72.0).unwrap();
 
@@ -315,7 +270,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "macos")]
     fn test_collection_fallback_discovery() {
         let mut collection = Collection::new("Menlo", 14.0, 72.0).unwrap();
 

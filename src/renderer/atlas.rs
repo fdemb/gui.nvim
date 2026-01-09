@@ -1,14 +1,7 @@
-#[cfg(not(target_os = "macos"))]
-use crossfont::{FontKey, GlyphKey, Size};
-
-#[cfg(not(target_os = "macos"))]
-use super::font::{CachedGlyph, FontSystem, GlyphBuffer, GlyphCache, RasterizedGlyph};
-
-#[cfg(target_os = "macos")]
 use super::font::{
     Collection, GlyphBuffer, GlyphCacheKey, RasterizedGlyph, ShapedCachedGlyph, ShapedGlyphCache,
+    Style,
 };
-
 use super::GpuContext;
 
 const ATLAS_SIZE: u32 = 1024;
@@ -23,10 +16,7 @@ pub struct GlyphAtlas {
     current_row_y: u32,
     current_row_x: u32,
     current_row_height: u32,
-    #[cfg(not(target_os = "macos"))]
-    cache: GlyphCache,
-    #[cfg(target_os = "macos")]
-    shaped_cache: ShapedGlyphCache,
+    cache: ShapedGlyphCache,
 }
 
 impl GlyphAtlas {
@@ -69,10 +59,7 @@ impl GlyphAtlas {
             current_row_y: 0,
             current_row_x: 0,
             current_row_height: 0,
-            #[cfg(not(target_os = "macos"))]
-            cache: GlyphCache::new(),
-            #[cfg(target_os = "macos")]
-            shaped_cache: ShapedGlyphCache::new(),
+            cache: ShapedGlyphCache::new(),
         }
     }
 
@@ -88,82 +75,18 @@ impl GlyphAtlas {
         self.size
     }
 
-    /// Get a cached glyph or rasterize and upload it (legacy crossfont path).
-    #[cfg(not(target_os = "macos"))]
-    pub fn get_glyph(
-        &mut self,
-        ctx: &GpuContext,
-        font_system: &mut FontSystem,
-        character: char,
-        font_key: FontKey,
-        font_size: f32,
-    ) -> Option<CachedGlyph> {
-        let key = GlyphKey {
-            font_key,
-            character,
-            size: Size::new(font_size),
-        };
-
-        // Check cache first - returns Some(Some(glyph)), Some(None) for cached failure, or None if not cached
-        if let Some(cached_result) = self.cache.get(&key) {
-            return cached_result.copied();
-        }
-
-        // Not in cache - try to rasterize
-        let rasterized = match font_system.rasterize(character, font_key) {
-            Ok(g) => g,
-            Err(e) => {
-                log::warn!("Failed to rasterize '{}': {}", character, e);
-                // Cache the failure so we don't try again
-                self.cache.insert(key, None);
-                return None;
-            }
-        };
-
-        if rasterized.width == 0 || rasterized.height == 0 {
-            let cached = CachedGlyph {
-                atlas_x: 0,
-                atlas_y: 0,
-                width: 0,
-                height: 0,
-                bearing_x: rasterized.bearing_x,
-                bearing_y: rasterized.bearing_y,
-                is_colored: rasterized.buffer.is_colored(),
-            };
-            self.cache.insert(key, Some(cached));
-            return Some(cached);
-        }
-
-        let (atlas_x, atlas_y) = self.allocate(rasterized.width, rasterized.height)?;
-        self.upload(ctx, &rasterized, atlas_x, atlas_y);
-
-        let cached = CachedGlyph {
-            atlas_x,
-            atlas_y,
-            width: rasterized.width,
-            height: rasterized.height,
-            bearing_x: rasterized.bearing_x,
-            bearing_y: rasterized.bearing_y,
-            is_colored: rasterized.buffer.is_colored(),
-        };
-
-        self.cache.insert(key, Some(cached));
-        Some(cached)
-    }
-
-    /// Get a glyph by ID from the new font system, or rasterize and cache it.
+    /// Get a glyph by ID, or rasterize and cache it.
     ///
-    /// This method uses the new HarfBuzz-based shaping system where glyphs are
+    /// This method uses the HarfBuzz-based shaping system where glyphs are
     /// identified by glyph ID rather than character. This enables proper ligature
     /// support and complex script rendering.
-    #[cfg(target_os = "macos")]
     pub fn get_glyph_by_id(
         &mut self,
         ctx: &GpuContext,
         collection: &Collection,
         key: GlyphCacheKey,
     ) -> Option<ShapedCachedGlyph> {
-        if let Some(cached_result) = self.shaped_cache.get(&key) {
+        if let Some(cached_result) = self.cache.get(&key) {
             return cached_result.copied();
         }
 
@@ -177,7 +100,7 @@ impl GlyphAtlas {
                     key.font_index,
                     e
                 );
-                self.shaped_cache.insert(key, None);
+                self.cache.insert(key, None);
                 return None;
             }
         };
@@ -192,7 +115,7 @@ impl GlyphAtlas {
                 bearing_y: rasterized.bearing_y,
                 is_colored: rasterized.buffer.is_colored(),
             };
-            self.shaped_cache.insert(key, Some(cached));
+            self.cache.insert(key, Some(cached));
             return Some(cached);
         }
 
@@ -209,10 +132,9 @@ impl GlyphAtlas {
             is_colored: rasterized.buffer.is_colored(),
         };
 
-        self.shaped_cache.insert(key, Some(cached));
+        self.cache.insert(key, Some(cached));
         Some(cached)
     }
-
 
     /// Allocate space in the atlas using row-based packing.
     fn allocate(&mut self, width: u32, height: u32) -> Option<(u32, u32)> {
@@ -295,12 +217,8 @@ impl GlyphAtlas {
         rgba
     }
 
-    #[allow(dead_code)]
     pub fn clear(&mut self, ctx: &GpuContext) {
-        #[cfg(not(target_os = "macos"))]
         self.cache.clear();
-        #[cfg(target_os = "macos")]
-        self.shaped_cache.clear();
         self.current_row_x = 0;
         self.current_row_y = 0;
         self.current_row_height = 0;
@@ -324,26 +242,11 @@ impl GlyphAtlas {
             .create_view(&wgpu::TextureViewDescriptor::default());
     }
 
-    #[cfg(not(target_os = "macos"))]
     pub fn prepopulate_ascii(
         &mut self,
         ctx: &GpuContext,
-        font_system: &mut FontSystem,
-        font_size: f32,
-    ) {
-        let font_key = font_system.font_key();
-        for c in ' '..='~' {
-            self.get_glyph(ctx, font_system, c, font_key, font_size);
-        }
-        log::info!("Pre-populated ASCII glyphs in atlas");
-    }
-
-    #[cfg(target_os = "macos")]
-    pub fn prepopulate_ascii_shaped(
-        &mut self,
-        ctx: &GpuContext,
         collection: &mut Collection,
-        style: super::font::Style,
+        style: Style,
     ) {
         let mut count = 0;
         for c in ' '..='~' {
@@ -354,16 +257,14 @@ impl GlyphAtlas {
                 }
             }
         }
-        log::info!("Pre-populated {} ASCII shaped glyphs in atlas", count);
+        log::info!("Pre-populated {} ASCII glyphs in atlas", count);
     }
-
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(target_os = "macos")]
-    use crate::renderer::font::{CollectionIndex, Style};
+    use crate::renderer::font::CollectionIndex;
 
     #[test]
     fn test_atlas_allocation_simple() {
@@ -432,7 +333,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "macos")]
     fn test_glyph_cache_key_creation() {
         let key = GlyphCacheKey::new(42, CollectionIndex::primary(Style::Regular));
         assert_eq!(key.glyph_id, 42);
@@ -441,7 +341,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "macos")]
     fn test_shaped_glyph_cache_insert_and_retrieve() {
         let mut cache = ShapedGlyphCache::new();
         let key = GlyphCacheKey::new(100, CollectionIndex::primary(Style::Bold));
@@ -468,7 +367,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "macos")]
     fn test_shaped_glyph_cache_failure_tracking() {
         let mut cache = ShapedGlyphCache::new();
         let key = GlyphCacheKey::new(0xFFFF, CollectionIndex::primary(Style::Regular));
@@ -481,7 +379,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "macos")]
     fn test_shaped_cached_glyph_empty() {
         let glyph = ShapedCachedGlyph::empty();
         assert_eq!(glyph.width, 0);
@@ -498,7 +395,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "macos")]
     fn test_collection_index_styles() {
         let styles = [Style::Regular, Style::Bold, Style::Italic, Style::BoldItalic];
 

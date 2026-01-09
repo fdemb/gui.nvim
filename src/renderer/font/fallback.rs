@@ -1,17 +1,12 @@
-#[cfg(target_os = "macos")]
 use objc2_core_foundation::{CFRange, CFRetained, CFString, CGFloat};
-#[cfg(target_os = "macos")]
 use objc2_core_text::CTFont;
 
-#[cfg(target_os = "macos")]
 use super::face::Face;
 
-#[cfg(target_os = "macos")]
 use std::collections::HashMap;
 
 const NERD_FONT_NAME: &str = "Symbols Nerd Font";
 
-#[cfg(target_os = "macos")]
 pub struct FallbackResolver {
     cache: HashMap<u32, Option<CachedFallback>>,
     nerd_font: Option<CFRetained<CTFont>>,
@@ -19,13 +14,11 @@ pub struct FallbackResolver {
     size_px: f32,
 }
 
-#[cfg(target_os = "macos")]
 #[derive(Clone)]
 struct CachedFallback {
     font_name: String,
 }
 
-#[cfg(target_os = "macos")]
 impl FallbackResolver {
     pub fn new(base_font: CFRetained<CTFont>, size_px: f32) -> Self {
         let nerd_font = Self::load_nerd_font(size_px);
@@ -152,32 +145,11 @@ impl FallbackResolver {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
-use super::face::Face;
-
-#[cfg(not(target_os = "macos"))]
-pub struct FallbackResolver;
-
-#[cfg(not(target_os = "macos"))]
-impl FallbackResolver {
-    pub fn new<T>(_base_font: T, _size_px: f32) -> Self {
-        Self
-    }
-
-    pub fn discover(&mut self, _codepoint: u32) -> Option<Face> {
-        None
-    }
-
-    pub fn clear_cache(&mut self) {}
-}
-
 #[cfg(test)]
 mod tests {
-    #[allow(unused_imports)]
     use super::*;
 
     #[test]
-    #[cfg(target_os = "macos")]
     fn test_nerd_font_codepoint_detection() {
         assert!(FallbackResolver::is_nerd_font_codepoint(0xE000));
         assert!(FallbackResolver::is_nerd_font_codepoint(0xE0A0));
@@ -189,7 +161,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "macos")]
     fn test_fallback_resolver_creation() {
         let cf_name = CFString::from_str("Menlo");
         let base_font = unsafe { CTFont::with_name(&cf_name, 14.0, std::ptr::null()) };
@@ -198,7 +169,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "macos")]
     fn test_fallback_resolver_emoji() {
         let cf_name = CFString::from_str("Menlo");
         let base_font = unsafe { CTFont::with_name(&cf_name, 14.0, std::ptr::null()) };
@@ -211,7 +181,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "macos")]
     fn test_fallback_resolver_ascii() {
         let cf_name = CFString::from_str("Menlo");
         let base_font = unsafe { CTFont::with_name(&cf_name, 14.0, std::ptr::null()) };
@@ -222,7 +191,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "macos")]
     fn test_fallback_resolver_nerd_font() {
         crate::font_loader::register_embedded_fonts();
 
@@ -239,7 +207,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "macos")]
     fn test_fallback_cache() {
         let cf_name = CFString::from_str("Menlo");
         let base_font = unsafe { CTFont::with_name(&cf_name, 14.0, std::ptr::null()) };

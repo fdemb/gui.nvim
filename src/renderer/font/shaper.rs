@@ -1,6 +1,4 @@
 use super::collection::{Collection, CollectionIndex, Style};
-
-#[cfg(target_os = "macos")]
 use super::face::Face;
 
 #[derive(Debug, Clone, Copy)]
@@ -20,12 +18,10 @@ pub struct TextRun<'a> {
     pub style: Style,
 }
 
-#[cfg(target_os = "macos")]
 struct HbBuffer {
     ptr: *mut harfbuzz_sys::hb_buffer_t,
 }
 
-#[cfg(target_os = "macos")]
 impl HbBuffer {
     fn new() -> Option<Self> {
         let ptr = unsafe { harfbuzz_sys::hb_buffer_create() };
@@ -86,7 +82,6 @@ impl HbBuffer {
     }
 }
 
-#[cfg(target_os = "macos")]
 impl Drop for HbBuffer {
     fn drop(&mut self) {
         unsafe { harfbuzz_sys::hb_buffer_destroy(self.ptr) };
@@ -102,7 +97,6 @@ const HB_FEATURE_GLOBAL_START: u32 = 0;
 const HB_FEATURE_GLOBAL_END: u32 = u32::MAX;
 
 pub struct Shaper {
-    #[cfg(target_os = "macos")]
     buffer: HbBuffer,
     features: Vec<harfbuzz_sys::hb_feature_t>,
 }
@@ -110,18 +104,9 @@ pub struct Shaper {
 impl Shaper {
     pub fn new() -> Self {
         let features = Self::default_features();
-
-        #[cfg(target_os = "macos")]
-        {
-            Self {
-                buffer: HbBuffer::new().expect("Failed to create HarfBuzz buffer"),
-                features,
-            }
-        }
-
-        #[cfg(not(target_os = "macos"))]
-        {
-            Self { features }
+        Self {
+            buffer: HbBuffer::new().expect("Failed to create HarfBuzz buffer"),
+            features,
         }
     }
 
@@ -134,17 +119,9 @@ impl Shaper {
             }
         }
 
-        #[cfg(target_os = "macos")]
-        {
-            Self {
-                buffer: HbBuffer::new().expect("Failed to create HarfBuzz buffer"),
-                features,
-            }
-        }
-
-        #[cfg(not(target_os = "macos"))]
-        {
-            Self { features }
+        Self {
+            buffer: HbBuffer::new().expect("Failed to create HarfBuzz buffer"),
+            features,
         }
     }
 
@@ -181,14 +158,12 @@ impl Shaper {
         ]
     }
 
-    #[cfg(target_os = "macos")]
     #[allow(dead_code)]
     pub fn shape(&mut self, run: &TextRun, collection: &Collection) -> Vec<ShapedGlyph> {
         let face = collection.primary_face(run.style);
         self.shape_with_face(run, face, CollectionIndex::primary(run.style))
     }
 
-    #[cfg(target_os = "macos")]
     pub fn shape_with_collection(
         &mut self,
         run: &TextRun,
@@ -223,7 +198,6 @@ impl Shaper {
         results
     }
 
-    #[cfg(target_os = "macos")]
     fn find_font_run<'a>(
         &self,
         text: &'a str,
@@ -257,7 +231,6 @@ impl Shaper {
         }
     }
 
-    #[cfg(target_os = "macos")]
     fn shape_with_face(
         &mut self,
         run: &TextRun,
@@ -301,32 +274,6 @@ impl Shaper {
         }
 
         results
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    pub fn shape(&mut self, run: &TextRun, _collection: &Collection) -> Vec<ShapedGlyph> {
-        run.text
-            .chars()
-            .enumerate()
-            .map(|(i, ch)| ShapedGlyph {
-                glyph_id: ch as u32,
-                cluster: i as u32,
-                x_advance: 0,
-                y_advance: 0,
-                x_offset: 0,
-                y_offset: 0,
-                font_index: CollectionIndex::primary(run.style),
-            })
-            .collect()
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    pub fn shape_with_collection(
-        &mut self,
-        run: &TextRun,
-        _collection: &mut Collection,
-    ) -> Vec<ShapedGlyph> {
-        self.shape(run, &Collection::new("", 14.0, 72.0).unwrap())
     }
 }
 
@@ -384,7 +331,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "macos")]
     fn test_hb_buffer() {
         let mut buffer = HbBuffer::new().expect("Failed to create buffer");
         buffer.add_str("Hello");
@@ -395,7 +341,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "macos")]
     fn test_shape_simple_text() {
         let collection = Collection::new("Menlo", 14.0, 72.0).unwrap();
         let mut shaper = Shaper::new();
@@ -413,7 +358,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "macos")]
     fn test_shape_with_collection() {
         let mut collection = Collection::new("Menlo", 14.0, 72.0).unwrap();
         let mut shaper = Shaper::new();
@@ -431,7 +375,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "macos")]
     fn test_shape_ligature_potential() {
         let collection = Collection::new("Menlo", 14.0, 72.0).unwrap();
         let mut shaper = Shaper::new();
@@ -453,7 +396,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "macos")]
     fn test_shape_cluster_indices() {
         let collection = Collection::new("Menlo", 14.0, 72.0).unwrap();
         let mut shaper = Shaper::new();
@@ -477,7 +419,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "macos")]
     fn test_shape_advances() {
         let collection = Collection::new("Menlo", 14.0, 72.0).unwrap();
         let mut shaper = Shaper::new();

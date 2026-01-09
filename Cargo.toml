@@ -22,7 +22,7 @@ winit = "0.30.12"
 wgpu = "28.0.0"
 bytemuck = { version = "1", features = ["derive"] }
 
-# Text shaping (HarfBuzz is used on all platforms)
+# Text shaping
 harfbuzz_rs = "2.0"
 harfbuzz-sys = "0.5"
 
@@ -35,12 +35,7 @@ thiserror = "2"
 serde = { version = "1.0.228", features = ["derive"] }
 toml = "0.9.10"
 
-# Font rasterization (non-macOS platforms use crossfont)
-[target.'cfg(not(target_os = "macos"))'.dependencies]
-crossfont = "0.9"
-
-[target.'cfg(target_os = "macos")'.dependencies]
-# Modern objc2 ecosystem for CoreText font handling
+# Font handling (CoreText + objc2)
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", features = ["NSString", "NSData", "NSArray"] }
 objc2-core-foundation = { version = "0.3", features = ["CFData", "CFError", "CFBase", "CFString"] }

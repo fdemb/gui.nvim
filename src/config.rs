@@ -6,6 +6,35 @@ use std::path::PathBuf;
 pub struct Config {
     #[serde(default)]
     pub font: FontSettings,
+    #[serde(default)]
+    pub performance: PerformanceSettings,
+}
+
+#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum VsyncMode {
+    Enabled,
+    Disabled,
+    MailboxIfAvailable,
+}
+
+impl Default for VsyncMode {
+    fn default() -> Self {
+        #[cfg(target_os = "macos")]
+        {
+            VsyncMode::Disabled
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            VsyncMode::MailboxIfAvailable
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct PerformanceSettings {
+    #[serde(default)]
+    pub vsync: VsyncMode,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -18,6 +47,15 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             font: FontSettings::default(),
+            performance: PerformanceSettings::default(),
+        }
+    }
+}
+
+impl Default for PerformanceSettings {
+    fn default() -> Self {
+        Self {
+            vsync: VsyncMode::default(),
         }
     }
 }
@@ -127,6 +165,7 @@ mod tests {
         let config = Config::default();
         assert_eq!(config.font.family, None);
         assert_eq!(config.font.size, None);
+        assert!(!config.performance.disable_throttling);
     }
 
     #[test]
@@ -185,5 +224,15 @@ mod tests {
         let settings = FontSettings::from_guifont("Fira Code").unwrap();
         assert_eq!(settings.family.as_deref(), Some("Fira Code"));
         assert_eq!(settings.size, None);
+    }
+
+    #[test]
+    fn test_parse_performance_config() {
+        let toml = r#"
+            [performance]
+            disable_throttling = true
+        "#;
+        let config: Config = toml::from_str(toml).unwrap();
+        assert!(config.performance.disable_throttling);
     }
 }

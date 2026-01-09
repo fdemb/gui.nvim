@@ -188,9 +188,13 @@ impl GridRenderer {
                 let cache_key = ShapingCacheKey::new(&run.text, run.style);
                 let shape_start = Instant::now();
 
-                // Check if we need to shape (cache miss)
-                let needs_shaping = !self.shaping_cache.contains(cache_key);
-                if needs_shaping {
+                // Single lookup: get_glyphs returns None on cache miss
+                self.glyph_scratch.clear();
+                if let Some(cached_glyphs) = self.shaping_cache.get_glyphs(cache_key) {
+                    stats.shaping_cache_hits += 1;
+                    self.glyph_scratch.extend_from_slice(cached_glyphs);
+                    stats.glyphs_shaped += self.glyph_scratch.len();
+                } else {
                     stats.shaping_cache_misses += 1;
                     stats.shape_calls += 1;
 
@@ -204,17 +208,8 @@ impl GridRenderer {
                         .shape_with_collection(&text_run, &mut self.collection);
                     stats.glyphs_shaped += new_shaped.len();
 
+                    self.glyph_scratch.extend_from_slice(&new_shaped);
                     self.shaping_cache.insert(cache_key, new_shaped);
-                } else {
-                    stats.shaping_cache_hits += 1;
-                }
-
-                // Copy glyphs to scratch buffer (reused, avoids allocation)
-                self.glyph_scratch.clear();
-                self.glyph_scratch
-                    .extend_from_slice(self.shaping_cache.get_glyphs(cache_key).unwrap());
-                if !needs_shaping {
-                    stats.glyphs_shaped += self.glyph_scratch.len();
                 }
 
                 stats.time_shaping += shape_start.elapsed();

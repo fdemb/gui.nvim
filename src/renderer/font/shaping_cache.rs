@@ -69,12 +69,7 @@ impl ShapingCache {
         }
     }
 
-    /// Check if a key exists in the cache without affecting hit/miss stats.
-    pub fn contains(&self, key: ShapingCacheKey) -> bool {
-        self.entries.contains_key(&key)
-    }
-
-    /// Get glyphs by key without stats tracking.
+    /// Get glyphs by key. Returns None on cache miss.
     pub fn get_glyphs(&self, key: ShapingCacheKey) -> Option<&[ShapedGlyph]> {
         self.entries.get(&key).map(|e| e.glyphs.as_slice())
     }
@@ -151,7 +146,6 @@ mod tests {
 
         cache.insert(key, glyphs.clone());
 
-        assert!(cache.contains(key));
         let result = cache.get_glyphs(key);
         assert!(result.is_some());
         assert_eq!(result.unwrap().len(), 2);
@@ -162,7 +156,6 @@ mod tests {
         let cache = ShapingCache::new();
 
         let key = ShapingCacheKey::new("hello", Style::Regular);
-        assert!(!cache.contains(key));
         assert!(cache.get_glyphs(key).is_none());
     }
 
@@ -198,12 +191,12 @@ mod tests {
 
         // Oldest entries should be gone
         let old_key = ShapingCacheKey::new("text0", Style::Regular);
-        assert!(!cache.contains(old_key));
+        assert!(cache.get_glyphs(old_key).is_none());
 
         // Newest entries should still be there
         let new_key =
             ShapingCacheKey::new(&format!("text{}", MAX_CACHE_ENTRIES + 99), Style::Regular);
-        assert!(cache.contains(new_key));
+        assert!(cache.get_glyphs(new_key).is_some());
     }
 
     #[test]
@@ -218,6 +211,6 @@ mod tests {
         cache.clear();
 
         assert_eq!(cache.len(), 0);
-        assert!(!cache.contains(key));
+        assert!(cache.get_glyphs(key).is_none());
     }
 }

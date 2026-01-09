@@ -2,6 +2,8 @@ use std::sync::Arc;
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
+use crate::config::VsyncMode;
+
 pub struct GpuContext {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
@@ -10,7 +12,7 @@ pub struct GpuContext {
 }
 
 impl GpuContext {
-    pub async fn new(window: Arc<Window>) -> Result<Self, GpuContextError> {
+    pub async fn new(window: Arc<Window>, vsync: VsyncMode) -> Result<Self, GpuContextError> {
         let size = window.inner_size();
         if size.width == 0 || size.height == 0 {
             return Err(GpuContextError::InvalidSize);
@@ -46,15 +48,30 @@ impl GpuContext {
             .find(|f| f.is_srgb())
             .unwrap_or(surface_caps.formats[0]);
 
+        let present_mode = Self::select_present_mode(&surface_caps, vsync);
+
+        // With VSync, use 1 frame in flight for lower latency (vs 2 which adds ~16-33ms)
+        let uses_vsync = matches!(
+            present_mode,
+            wgpu::PresentMode::AutoVsync | wgpu::PresentMode::Fifo | wgpu::PresentMode::Mailbox
+        );
+        let desired_maximum_frame_latency = if uses_vsync { 1 } else { 2 };
+
+        log::info!(
+            "Present mode: {:?}, frame latency: {}",
+            present_mode,
+            desired_maximum_frame_latency
+        );
+
         let surface_config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
             width: size.width,
             height: size.height,
-            present_mode: wgpu::PresentMode::AutoVsync,
+            present_mode,
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
-            desired_maximum_frame_latency: 2,
+            desired_maximum_frame_latency,
         };
         surface.configure(&device, &surface_config);
 
@@ -84,6 +101,26 @@ impl GpuContext {
 
     pub fn get_current_texture(&self) -> Result<wgpu::SurfaceTexture, wgpu::SurfaceError> {
         self.surface.get_current_texture()
+    }
+
+    fn select_present_mode(
+        surface_caps: &wgpu::SurfaceCapabilities,
+        vsync: VsyncMode,
+    ) -> wgpu::PresentMode {
+        match vsync {
+            VsyncMode::Enabled => wgpu::PresentMode::AutoVsync,
+            VsyncMode::Disabled => wgpu::PresentMode::AutoNoVsync,
+            VsyncMode::MailboxIfAvailable => {
+                if surface_caps
+                    .present_modes
+                    .contains(&wgpu::PresentMode::Mailbox)
+                {
+                    wgpu::PresentMode::Mailbox
+                } else {
+                    wgpu::PresentMode::AutoVsync
+                }
+            }
+        }
     }
 }
 

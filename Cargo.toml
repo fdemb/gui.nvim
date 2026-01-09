@@ -26,6 +26,9 @@ bytemuck = { version = "1", features = ["derive"] }
 harfbuzz_rs = "2.0"
 harfbuzz-sys = "0.5"
 
+# CLI
+clap = { version = "4", features = ["derive"] }
+
 # Utilities
 ahash = "0.8"
 bitflags = "2"

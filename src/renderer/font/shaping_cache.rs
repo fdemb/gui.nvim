@@ -118,45 +118,11 @@ impl ShapingCache {
         // Don't reset stats - they're cumulative
     }
 
-    /// Get cache statistics.
-    pub fn stats(&self) -> ShapingCacheStats {
-        ShapingCacheStats {
-            entries: self.entries.len(),
-            hits: self.hits,
-            misses: self.misses,
-        }
-    }
-
-    /// Reset statistics counters.
-    pub fn reset_stats(&mut self) {
-        self.hits = 0;
-        self.misses = 0;
-    }
 }
 
 impl Default for ShapingCache {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-/// Statistics about shaping cache usage.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct ShapingCacheStats {
-    pub entries: usize,
-    pub hits: u64,
-    pub misses: u64,
-}
-
-impl ShapingCacheStats {
-    /// Calculate hit rate as a percentage.
-    pub fn hit_rate(&self) -> f64 {
-        let total = self.hits + self.misses;
-        if total == 0 {
-            0.0
-        } else {
-            (self.hits as f64 / total as f64) * 100.0
-        }
     }
 }
 

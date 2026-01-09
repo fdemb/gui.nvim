@@ -29,7 +29,7 @@ harfbuzz-sys = "0.5"
 # Utilities
 ahash = "0.8"
 bitflags = "2"
-log = "0.4"
+log = { version = "0.4", features = ["release_max_level_warn"] }
 env_logger = "0.11"
 thiserror = "2"
 serde = { version = "1.0.228", features = ["derive"] }

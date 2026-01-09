@@ -1,4 +1,5 @@
 use bitflags::bitflags;
+use compact_str::CompactString;
 
 bitflags! {
     /// Cell attribute flags for efficient storage of boolean attributes.
@@ -16,11 +17,14 @@ bitflags! {
 /// Cells are designed to be compact while storing all information needed
 /// for rendering. The highlight_id refers to attributes defined by Neovim's
 /// `hl_attr_define` events.
+///
+/// Uses `CompactString` for SSO (small string optimization) - strings up to
+/// 24 bytes are stored inline without heap allocation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Cell {
     /// The character displayed in this cell.
     /// Empty cells contain a space character.
-    pub text: String,
+    pub text: CompactString,
     /// Highlight attribute ID from Neovim.
     /// ID 0 means default highlighting.
     pub highlight_id: u64,
@@ -31,7 +35,7 @@ pub struct Cell {
 impl Default for Cell {
     fn default() -> Self {
         Self {
-            text: String::from(" "),
+            text: CompactString::const_new(" "),
             highlight_id: 0,
             flags: CellFlags::empty(),
         }
@@ -41,7 +45,7 @@ impl Default for Cell {
 impl Cell {
     /// Creates a new cell with the given text and highlight ID.
     #[allow(dead_code)]
-    pub fn new(text: impl Into<String>, highlight_id: u64) -> Self {
+    pub fn new(text: impl Into<CompactString>, highlight_id: u64) -> Self {
         Self {
             text: text.into(),
             highlight_id,
@@ -79,8 +83,7 @@ impl Cell {
 
     /// Resets the cell to its default state.
     pub fn clear(&mut self) {
-        self.text.clear();
-        self.text.push(' ');
+        self.text = CompactString::const_new(" ");
         self.highlight_id = 0;
         self.flags = CellFlags::empty();
     }
@@ -160,8 +163,8 @@ mod tests {
 
     #[test]
     fn test_cell_size() {
-        // Ensure cell size is reasonable (String is 24 bytes on 64-bit)
-        // text: String (24) + highlight_id: u64 (8) + flags: u16 (2) + padding
+        // CompactString is 24 bytes with inline storage for up to 24 bytes
+        // text: CompactString (24) + highlight_id: u64 (8) + flags: u16 (2) + padding
         let size = mem::size_of::<Cell>();
         assert!(size <= 40, "Cell size {} is larger than expected", size);
     }

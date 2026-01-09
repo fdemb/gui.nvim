@@ -118,6 +118,32 @@ impl ShapingCache {
         // Don't reset stats - they're cumulative
     }
 
+    /// Returns cache statistics.
+    #[cfg(test)]
+    pub fn stats(&self) -> CacheStats {
+        CacheStats {
+            hits: self.hits,
+            misses: self.misses,
+        }
+    }
+}
+
+#[cfg(test)]
+pub struct CacheStats {
+    pub hits: u64,
+    pub misses: u64,
+}
+
+#[cfg(test)]
+impl CacheStats {
+    pub fn hit_rate(&self) -> f64 {
+        let total = self.hits + self.misses;
+        if total == 0 {
+            0.0
+        } else {
+            (self.hits as f64 / total as f64) * 100.0
+        }
+    }
 }
 
 impl Default for ShapingCache {

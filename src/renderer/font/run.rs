@@ -119,7 +119,7 @@ mod tests {
 
     fn make_cell(text: &str, highlight_id: u64) -> Cell {
         Cell {
-            text: text.to_string(),
+            text: text.into(),
             highlight_id,
             flags: CellFlags::empty(),
         }
@@ -127,7 +127,7 @@ mod tests {
 
     fn make_wide_spacer(highlight_id: u64) -> Cell {
         Cell {
-            text: String::new(),
+            text: Default::default(),
             highlight_id,
             flags: CellFlags::WIDE_CHAR_SPACER,
         }

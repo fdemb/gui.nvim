@@ -138,11 +138,11 @@ impl Grid {
     /// Updates cells starting at (row, col_start) with the provided cell data.
     /// Each item in `cells` is (text, highlight_id, repeat_count).
     /// If highlight_id is None, the previous highlight is reused.
-    pub fn update_line(
+    pub fn update_line<S: AsRef<str>>(
         &mut self,
         row: usize,
         col_start: usize,
-        cells: &[(String, Option<u64>, usize)],
+        cells: &[(S, Option<u64>, usize)],
     ) {
         if row >= self.height {
             return;
@@ -152,6 +152,7 @@ impl Grid {
         let mut last_hl_id: u64 = 0;
 
         for (text, hl_id, repeat) in cells {
+            let text = text.as_ref();
             let hl_id = hl_id.unwrap_or(last_hl_id);
             last_hl_id = hl_id;
 
@@ -164,11 +165,11 @@ impl Grid {
 
                 let cell = &mut self.cells[row * self.width + col];
                 if is_wide_spacer {
-                    cell.text.clear();
+                    cell.text = compact_str::CompactString::default();
                     cell.set_wide_spacer(true);
                     cell.set_wide(false);
                 } else {
-                    cell.text.clone_from(text);
+                    cell.text = compact_str::CompactString::from(text);
                     cell.flags = super::cell::CellFlags::empty();
                 }
                 cell.highlight_id = hl_id;
@@ -346,9 +347,9 @@ mod tests {
 
         // Simulate: ["a", 1], ["b", 1], ["c", 2]
         let cells = vec![
-            ("a".into(), Some(1), 1),
-            ("b".into(), None, 1),    // reuses hl_id 1
-            ("c".into(), Some(2), 1), // new hl_id
+            ("a", Some(1), 1),
+            ("b", None, 1),    // reuses hl_id 1
+            ("c", Some(2), 1), // new hl_id
         ];
 
         grid.update_line(0, 0, &cells);
@@ -366,7 +367,7 @@ mod tests {
         let mut grid = Grid::new(1, 10, 5);
 
         // Simulate: [" ", 0, 5] (5 spaces)
-        let cells = vec![(" ".into(), Some(0), 5)];
+        let cells = vec![(" ", Some(0), 5)];
 
         grid.update_line(0, 2, &cells);
 
@@ -439,7 +440,7 @@ mod tests {
         assert!(!grid[(0, 1)].is_empty()); // Spacer flag means not empty
 
         // Now update the line with regular text
-        let cells = vec![("x".into(), Some(1), 1)];
+        let cells = vec![("x", Some(1), 1)];
         grid.update_line(0, 1, &cells);
 
         // After update, flags should be cleared
@@ -458,7 +459,7 @@ mod tests {
         assert!(grid[(0, 0)].is_wide_spacer());
 
         // Update with a space and default highlight
-        let cells = vec![(" ".into(), Some(0), 1)];
+        let cells = vec![(" ", Some(0), 1)];
         grid.update_line(0, 0, &cells);
 
         // After update, cell should be empty (space with hl_id 0 and no flags)

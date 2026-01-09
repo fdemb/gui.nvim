@@ -216,22 +216,27 @@ impl FontSystem {
         self.metrics.line_height as f32
     }
 
+    #[allow(dead_code)]
     pub fn descent(&self) -> f32 {
         self.metrics.descent
     }
 
+    #[allow(dead_code)]
     pub fn underline_position(&self) -> f32 {
         self.metrics.underline_position
     }
 
+    #[allow(dead_code)]
     pub fn underline_thickness(&self) -> f32 {
         self.metrics.underline_thickness.max(1.0)
     }
 
+    #[allow(dead_code)]
     pub fn strikeout_position(&self) -> f32 {
         self.metrics.strikeout_position
     }
 
+    #[allow(dead_code)]
     pub fn strikeout_thickness(&self) -> f32 {
         self.metrics.strikeout_thickness.max(1.0)
     }

@@ -2,6 +2,7 @@
 mod macos {
     use objc2_core_foundation::{CFData, CFError, CFRetained};
     use objc2_core_graphics::{CGDataProvider, CGFont};
+    #[allow(deprecated)]
     use objc2_core_text::CTFontManagerRegisterGraphicsFont;
     use std::ptr::{self, NonNull};
     use std::sync::Once;

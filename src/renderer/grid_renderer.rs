@@ -1,5 +1,3 @@
-use crossfont::Size;
-
 use super::atlas::GlyphAtlas;
 use super::batch::RenderBatcher;
 use super::color::u32_to_linear_rgba;
@@ -23,7 +21,7 @@ pub struct GridRenderer {
     shaper: Shaper,
     cell_width: f32,
     cell_height: f32,
-    font_size: Size,
+    scaled_font_size: f32,
     #[cfg(target_os = "macos")]
     descent: f32,
 }
@@ -39,10 +37,10 @@ impl GridRenderer {
 
         let cell_width = font_system.cell_width();
         let cell_height = font_system.cell_height();
-        let font_size = Size::new(font_config.scaled_size());
+        let scaled_font_size = font_config.scaled_size();
 
         let mut atlas = GlyphAtlas::new(ctx);
-        atlas.prepopulate_ascii(ctx, &mut font_system, font_size);
+        atlas.prepopulate_ascii(ctx, &mut font_system, scaled_font_size);
 
         let batcher = RenderBatcher::new(ctx);
 
@@ -66,7 +64,7 @@ impl GridRenderer {
             shaper,
             cell_width,
             cell_height,
-            font_size,
+            scaled_font_size,
             #[cfg(target_os = "macos")]
             descent,
         })
@@ -83,11 +81,11 @@ impl GridRenderer {
 
         let cell_width = font_system.cell_width();
         let cell_height = font_system.cell_height();
-        let font_size = Size::new(font_config.scaled_size());
+        let scaled_font_size = font_config.scaled_size();
 
         self.atlas.clear(ctx);
         self.atlas
-            .prepopulate_ascii(ctx, &mut font_system, font_size);
+            .prepopulate_ascii(ctx, &mut font_system, scaled_font_size);
 
         #[cfg(target_os = "macos")]
         {
@@ -103,7 +101,7 @@ impl GridRenderer {
         self.font_system = font_system;
         self.cell_width = cell_width;
         self.cell_height = cell_height;
-        self.font_size = font_size;
+        self.scaled_font_size = scaled_font_size;
 
         Ok(())
     }
@@ -335,7 +333,7 @@ impl GridRenderer {
                 &mut self.font_system,
                 character,
                 font_key,
-                self.font_size,
+                self.scaled_font_size,
             ) {
                 if cached.width > 0 && cached.height > 0 {
                     let atlas_size = self.atlas.atlas_size() as f32;
@@ -381,16 +379,37 @@ impl GridRenderer {
             .map(|c| u32_to_linear_rgba(c.0 >> 8))
             .unwrap_or(fg);
 
-        let geom = compute_decoration_geometry(
-            x,
-            y,
-            self.cell_width,
-            self.cell_height,
+        // Use collection's metrics on macOS, fall back to legacy font_system on other platforms
+        #[cfg(target_os = "macos")]
+        let (descent, underline_pos, underline_thick, strikeout_pos, strikeout_thick) = {
+            let metrics = self.collection.metrics();
+            (
+                metrics.descent,
+                metrics.underline_position,
+                metrics.underline_thickness,
+                metrics.strikeout_position,
+                metrics.strikeout_thickness,
+            )
+        };
+        #[cfg(not(target_os = "macos"))]
+        let (descent, underline_pos, underline_thick, strikeout_pos, strikeout_thick) = (
             self.font_system.descent(),
             self.font_system.underline_position(),
             self.font_system.underline_thickness(),
             self.font_system.strikeout_position(),
             self.font_system.strikeout_thickness(),
+        );
+
+        let geom = compute_decoration_geometry(
+            x,
+            y,
+            self.cell_width,
+            self.cell_height,
+            descent,
+            underline_pos,
+            underline_thick,
+            strikeout_pos,
+            strikeout_thick,
             underline_style,
             has_strikethrough,
         );

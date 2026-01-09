@@ -86,12 +86,12 @@ impl GlyphAtlas {
         font_system: &mut FontSystem,
         character: char,
         font_key: FontKey,
-        font_size: Size,
+        font_size: f32,
     ) -> Option<CachedGlyph> {
         let key = GlyphKey {
             font_key,
             character,
-            size: font_size,
+            size: Size::new(font_size),
         };
 
         // Check cache first - returns Some(Some(glyph)), Some(None) for cached failure, or None if not cached
@@ -325,7 +325,7 @@ impl GlyphAtlas {
         &mut self,
         ctx: &GpuContext,
         font_system: &mut FontSystem,
-        font_size: Size,
+        font_size: f32,
     ) {
         let font_key = font_system.font_key();
         for c in ' '..='~' {

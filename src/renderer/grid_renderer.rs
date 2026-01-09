@@ -37,6 +37,8 @@ pub struct GridRenderer {
     shaper: Shaper,
     /// Cache for shaped text runs to avoid redundant HarfBuzz calls.
     shaping_cache: ShapingCache,
+    /// Scratch buffer for copying glyphs from cache (avoids allocation per run).
+    glyph_scratch: Vec<ShapedGlyph>,
     cell_width: f32,
     cell_height: f32,
     /// Distance from the top of the cell to the baseline.
@@ -74,6 +76,7 @@ impl GridRenderer {
             collection,
             shaper,
             shaping_cache: ShapingCache::new(),
+            glyph_scratch: Vec::with_capacity(64),
             cell_width,
             cell_height,
             baseline_offset,
@@ -182,40 +185,42 @@ impl GridRenderer {
                 let attrs = highlights.get(run.highlight_id);
                 let (_, fg) = self.resolve_colors(attrs, default_bg, default_fg);
 
-                // Try to get shaped glyphs from cache
                 let cache_key = ShapingCacheKey::new(&run.text, run.style);
                 let shape_start = Instant::now();
 
-                // Check cache and clone if found, otherwise shape
-                let shaped: Vec<ShapedGlyph> =
-                    if let Some(cached) = self.shaping_cache.get(cache_key) {
-                        stats.shaping_cache_hits += 1;
-                        stats.glyphs_shaped += cached.glyphs.len();
-                        cached.glyphs.clone()
-                    } else {
-                        stats.shaping_cache_misses += 1;
-                        stats.shape_calls += 1;
+                // Check if we need to shape (cache miss)
+                let needs_shaping = !self.shaping_cache.contains(cache_key);
+                if needs_shaping {
+                    stats.shaping_cache_misses += 1;
+                    stats.shape_calls += 1;
 
-                        let text_run = TextRun {
-                            text: &run.text,
-                            style: run.style,
-                        };
-
-                        let new_shaped = self
-                            .shaper
-                            .shape_with_collection(&text_run, &mut self.collection);
-                        stats.glyphs_shaped += new_shaped.len();
-
-                        // Insert into cache
-                        self.shaping_cache.insert(cache_key, new_shaped.clone());
-
-                        new_shaped
+                    let text_run = TextRun {
+                        text: &run.text,
+                        style: run.style,
                     };
-                stats.time_shaping += shape_start.elapsed();
 
+                    let new_shaped = self
+                        .shaper
+                        .shape_with_collection(&text_run, &mut self.collection);
+                    stats.glyphs_shaped += new_shaped.len();
+
+                    self.shaping_cache.insert(cache_key, new_shaped);
+                } else {
+                    stats.shaping_cache_hits += 1;
+                }
+
+                // Copy glyphs to scratch buffer (reused, avoids allocation)
+                self.glyph_scratch.clear();
+                self.glyph_scratch
+                    .extend_from_slice(self.shaping_cache.get_glyphs(cache_key).unwrap());
+                if !needs_shaping {
+                    stats.glyphs_shaped += self.glyph_scratch.len();
+                }
+
+                stats.time_shaping += shape_start.elapsed();
                 let run_x = run.start_col as f32 * self.cell_width + x_offset;
 
-                self.push_shaped_run_with_stats(ctx, run_x, y, &shaped, fg, &mut stats);
+                self.push_shaped_run_with_stats_inline(ctx, run_x, y, fg, &mut stats);
             }
         }
 
@@ -230,23 +235,25 @@ impl GridRenderer {
         shaped: &[ShapedGlyph],
         fg: [f32; 4],
     ) {
+        self.glyph_scratch.clear();
+        self.glyph_scratch.extend_from_slice(shaped);
         let mut stats = PrepareStats::default();
-        self.push_shaped_run_with_stats(ctx, run_x, y, shaped, fg, &mut stats);
+        self.push_shaped_run_with_stats_inline(ctx, run_x, y, fg, &mut stats);
     }
 
-    fn push_shaped_run_with_stats(
+    fn push_shaped_run_with_stats_inline(
         &mut self,
         ctx: &GpuContext,
         run_x: f32,
         y: f32,
-        shaped: &[ShapedGlyph],
         fg: [f32; 4],
         stats: &mut PrepareStats,
     ) {
         let mut x = run_x;
         let baseline_y = y + self.baseline_offset;
 
-        for glyph in shaped {
+        for i in 0..self.glyph_scratch.len() {
+            let glyph = self.glyph_scratch[i];
             let key = GlyphCacheKey::new(glyph.glyph_id, glyph.font_index);
 
             let lookup_start = Instant::now();

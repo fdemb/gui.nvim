@@ -8,7 +8,79 @@ use objc2_core_text::{CTFont, CTFontOrientation, CTFontSymbolicTraits};
 #[cfg(target_os = "macos")]
 use std::ptr::{self, NonNull};
 
-use super::legacy::{GlyphBuffer, RasterizedGlyph};
+#[cfg(target_os = "macos")]
+use crate::config::FontSettings;
+
+/// Rasterized glyph with positioning data.
+#[derive(Clone)]
+pub struct RasterizedGlyph {
+    #[allow(dead_code)]
+    pub character: char,
+    pub width: u32,
+    pub height: u32,
+    pub bearing_x: i32,
+    pub bearing_y: i32,
+    pub buffer: GlyphBuffer,
+}
+
+#[derive(Clone)]
+pub enum GlyphBuffer {
+    Rgb(Vec<u8>),
+    Rgba(Vec<u8>),
+}
+
+impl GlyphBuffer {
+    pub fn is_colored(&self) -> bool {
+        matches!(self, GlyphBuffer::Rgba(_))
+    }
+
+    #[allow(dead_code)]
+    pub fn as_bytes(&self) -> &[u8] {
+        match self {
+            GlyphBuffer::Rgb(b) | GlyphBuffer::Rgba(b) => b,
+        }
+    }
+}
+
+/// Font configuration with fallback chain.
+#[cfg(target_os = "macos")]
+pub struct FontConfig {
+    pub family: String,
+    pub size_pt: f32,
+    pub scale_factor: f32,
+}
+
+#[cfg(target_os = "macos")]
+impl FontConfig {
+    pub fn new(settings: &FontSettings, scale_factor: f64) -> Self {
+        Self {
+            family: settings.family.clone().unwrap_or_else(default_font_family),
+            size_pt: settings.size.unwrap_or(14.0),
+            scale_factor: scale_factor as f32,
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn scaled_size(&self) -> f32 {
+        self.size_pt * self.scale_factor
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl Default for FontConfig {
+    fn default() -> Self {
+        Self {
+            family: default_font_family(),
+            size_pt: 14.0,
+            scale_factor: 1.0,
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn default_font_family() -> String {
+    "Menlo".to_string()
+}
 
 #[cfg(target_os = "macos")]
 pub struct HbFontWrapper {

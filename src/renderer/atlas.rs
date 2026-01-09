@@ -1,9 +1,14 @@
+#[cfg(not(target_os = "macos"))]
 use crossfont::{FontKey, GlyphKey, Size};
 
+#[cfg(not(target_os = "macos"))]
+use super::font::{CachedGlyph, FontSystem, GlyphBuffer, GlyphCache, RasterizedGlyph};
+
+#[cfg(target_os = "macos")]
 use super::font::{
-    CachedGlyph, Collection, FontSystem, GlyphBuffer, GlyphCache, GlyphCacheKey, RasterizedGlyph,
-    ShapedCachedGlyph, ShapedGlyphCache,
+    Collection, GlyphBuffer, GlyphCacheKey, RasterizedGlyph, ShapedCachedGlyph, ShapedGlyphCache,
 };
+
 use super::GpuContext;
 
 const ATLAS_SIZE: u32 = 1024;
@@ -18,7 +23,9 @@ pub struct GlyphAtlas {
     current_row_y: u32,
     current_row_x: u32,
     current_row_height: u32,
+    #[cfg(not(target_os = "macos"))]
     cache: GlyphCache,
+    #[cfg(target_os = "macos")]
     shaped_cache: ShapedGlyphCache,
 }
 
@@ -62,7 +69,9 @@ impl GlyphAtlas {
             current_row_y: 0,
             current_row_x: 0,
             current_row_height: 0,
+            #[cfg(not(target_os = "macos"))]
             cache: GlyphCache::new(),
+            #[cfg(target_os = "macos")]
             shaped_cache: ShapedGlyphCache::new(),
         }
     }
@@ -79,7 +88,8 @@ impl GlyphAtlas {
         self.size
     }
 
-    /// Get a cached glyph or rasterize and upload it.
+    /// Get a cached glyph or rasterize and upload it (legacy crossfont path).
+    #[cfg(not(target_os = "macos"))]
     pub fn get_glyph(
         &mut self,
         ctx: &GpuContext,
@@ -203,15 +213,6 @@ impl GlyphAtlas {
         Some(cached)
     }
 
-    #[cfg(not(target_os = "macos"))]
-    pub fn get_glyph_by_id(
-        &mut self,
-        _ctx: &GpuContext,
-        _collection: &Collection,
-        _key: GlyphCacheKey,
-    ) -> Option<ShapedCachedGlyph> {
-        None
-    }
 
     /// Allocate space in the atlas using row-based packing.
     fn allocate(&mut self, width: u32, height: u32) -> Option<(u32, u32)> {
@@ -296,7 +297,9 @@ impl GlyphAtlas {
 
     #[allow(dead_code)]
     pub fn clear(&mut self, ctx: &GpuContext) {
+        #[cfg(not(target_os = "macos"))]
         self.cache.clear();
+        #[cfg(target_os = "macos")]
         self.shaped_cache.clear();
         self.current_row_x = 0;
         self.current_row_y = 0;
@@ -321,6 +324,7 @@ impl GlyphAtlas {
             .create_view(&wgpu::TextureViewDescriptor::default());
     }
 
+    #[cfg(not(target_os = "macos"))]
     pub fn prepopulate_ascii(
         &mut self,
         ctx: &GpuContext,
@@ -353,20 +357,12 @@ impl GlyphAtlas {
         log::info!("Pre-populated {} ASCII shaped glyphs in atlas", count);
     }
 
-    #[cfg(not(target_os = "macos"))]
-    pub fn prepopulate_ascii_shaped(
-        &mut self,
-        _ctx: &GpuContext,
-        _collection: &mut Collection,
-        _style: super::font::Style,
-    ) {
-        // No-op on non-macOS platforms
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "macos")]
     use crate::renderer::font::{CollectionIndex, Style};
 
     #[test]
@@ -436,6 +432,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
     fn test_glyph_cache_key_creation() {
         let key = GlyphCacheKey::new(42, CollectionIndex::primary(Style::Regular));
         assert_eq!(key.glyph_id, 42);
@@ -444,6 +441,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
     fn test_shaped_glyph_cache_insert_and_retrieve() {
         let mut cache = ShapedGlyphCache::new();
         let key = GlyphCacheKey::new(100, CollectionIndex::primary(Style::Bold));
@@ -470,6 +468,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
     fn test_shaped_glyph_cache_failure_tracking() {
         let mut cache = ShapedGlyphCache::new();
         let key = GlyphCacheKey::new(0xFFFF, CollectionIndex::primary(Style::Regular));
@@ -482,6 +481,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
     fn test_shaped_cached_glyph_empty() {
         let glyph = ShapedCachedGlyph::empty();
         assert_eq!(glyph.width, 0);
@@ -498,6 +498,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
     fn test_collection_index_styles() {
         let styles = [Style::Regular, Style::Bold, Style::Italic, Style::BoldItalic];
 

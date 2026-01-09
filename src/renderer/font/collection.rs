@@ -1,4 +1,5 @@
 use super::face::{Face, FaceError, FaceMetrics};
+#[cfg(target_os = "macos")]
 use super::fallback::FallbackResolver;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

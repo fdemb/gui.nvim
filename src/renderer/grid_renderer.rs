@@ -2,18 +2,20 @@ use super::atlas::GlyphAtlas;
 use super::batch::RenderBatcher;
 use super::color::u32_to_linear_rgba;
 #[cfg(target_os = "macos")]
-use super::font::{Collection, GlyphCacheKey, RunIterator, ShapedGlyph, Shaper, Style, TextRun};
+use super::font::{Collection, FontConfig, GlyphCacheKey, RunIterator, ShapedGlyph, Shaper, Style, TextRun};
+#[cfg(not(target_os = "macos"))]
 use super::font::{FontConfig, FontSystem};
 use super::geometry::{compute_cursor_geometry, compute_decoration_geometry};
 use super::GpuContext;
 use crate::config::FontSettings;
-use crate::editor::{
-    Cell, CursorShape, EditorState, HighlightAttributes, StyleFlags, UnderlineStyle,
-};
+#[cfg(not(target_os = "macos"))]
+use crate::editor::Cell;
+use crate::editor::{CursorShape, EditorState, HighlightAttributes, StyleFlags, UnderlineStyle};
 
 pub struct GridRenderer {
     batcher: RenderBatcher,
     atlas: GlyphAtlas,
+    #[cfg(not(target_os = "macos"))]
     font_system: FontSystem,
     #[cfg(target_os = "macos")]
     collection: Collection,
@@ -21,12 +23,46 @@ pub struct GridRenderer {
     shaper: Shaper,
     cell_width: f32,
     cell_height: f32,
+    #[cfg(not(target_os = "macos"))]
     scaled_font_size: f32,
     #[cfg(target_os = "macos")]
     descent: f32,
 }
 
 impl GridRenderer {
+    #[cfg(target_os = "macos")]
+    pub fn new(
+        ctx: &GpuContext,
+        font_settings: &FontSettings,
+        scale_factor: f64,
+    ) -> Result<Self, GridRendererError> {
+        let font_config = FontConfig::new(font_settings, scale_factor);
+        let dpi = 72.0 * scale_factor as f32;
+        let mut collection = Collection::new(&font_config.family, font_config.size_pt, dpi)?;
+        let shaper = Shaper::new();
+
+        let metrics = collection.metrics();
+        let cell_width = metrics.cell_width;
+        let cell_height = metrics.cell_height;
+        let descent = metrics.descent;
+
+        let mut atlas = GlyphAtlas::new(ctx);
+        atlas.prepopulate_ascii_shaped(ctx, &mut collection, Style::Regular);
+
+        let batcher = RenderBatcher::new(ctx);
+
+        Ok(Self {
+            batcher,
+            atlas,
+            collection,
+            shaper,
+            cell_width,
+            cell_height,
+            descent,
+        })
+    }
+
+    #[cfg(not(target_os = "macos"))]
     pub fn new(
         ctx: &GpuContext,
         font_settings: &FontSettings,
@@ -44,32 +80,41 @@ impl GridRenderer {
 
         let batcher = RenderBatcher::new(ctx);
 
-        #[cfg(target_os = "macos")]
-        let (collection, shaper, descent) = {
-            let dpi = 72.0 * scale_factor as f32;
-            let mut collection = Collection::new(&font_config.family, font_config.size_pt, dpi)?;
-            let shaper = Shaper::new();
-            let descent = collection.metrics().descent;
-            atlas.prepopulate_ascii_shaped(ctx, &mut collection, Style::Regular);
-            (collection, shaper, descent)
-        };
-
         Ok(Self {
             batcher,
             atlas,
             font_system,
-            #[cfg(target_os = "macos")]
-            collection,
-            #[cfg(target_os = "macos")]
-            shaper,
             cell_width,
             cell_height,
             scaled_font_size,
-            #[cfg(target_os = "macos")]
-            descent,
         })
     }
 
+    #[cfg(target_os = "macos")]
+    pub fn update_font(
+        &mut self,
+        ctx: &GpuContext,
+        font_settings: &FontSettings,
+        scale_factor: f64,
+    ) -> Result<(), GridRendererError> {
+        let font_config = FontConfig::new(font_settings, scale_factor);
+        let dpi = 72.0 * scale_factor as f32;
+        let mut collection = Collection::new(&font_config.family, font_config.size_pt, dpi)?;
+        self.shaper = Shaper::new();
+
+        let metrics = collection.metrics();
+        self.cell_width = metrics.cell_width;
+        self.cell_height = metrics.cell_height;
+        self.descent = metrics.descent;
+
+        self.atlas.clear(ctx);
+        self.atlas.prepopulate_ascii_shaped(ctx, &mut collection, Style::Regular);
+        self.collection = collection;
+
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "macos"))]
     pub fn update_font(
         &mut self,
         ctx: &GpuContext,
@@ -84,19 +129,7 @@ impl GridRenderer {
         let scaled_font_size = font_config.scaled_size();
 
         self.atlas.clear(ctx);
-        self.atlas
-            .prepopulate_ascii(ctx, &mut font_system, scaled_font_size);
-
-        #[cfg(target_os = "macos")]
-        {
-            let dpi = 72.0 * scale_factor as f32;
-            let mut collection = Collection::new(&font_config.family, font_config.size_pt, dpi)?;
-            self.shaper = Shaper::new();
-            self.descent = collection.metrics().descent;
-            self.atlas
-                .prepopulate_ascii_shaped(ctx, &mut collection, Style::Regular);
-            self.collection = collection;
-        }
+        self.atlas.prepopulate_ascii(ctx, &mut font_system, scaled_font_size);
 
         self.font_system = font_system;
         self.cell_width = cell_width;
@@ -111,6 +144,7 @@ impl GridRenderer {
     }
 
     #[allow(dead_code)]
+    #[cfg(not(target_os = "macos"))]
     pub fn font_system(&self) -> &FontSystem {
         &self.font_system
     }
@@ -308,6 +342,7 @@ impl GridRenderer {
         }
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[inline(always)]
     fn push_cell_glyph(
         &mut self,
@@ -458,6 +493,7 @@ impl GridRenderer {
         &self.batcher
     }
 
+    #[cfg(target_os = "macos")]
     fn prepare_cursor(
         &mut self,
         ctx: &GpuContext,
@@ -515,8 +551,88 @@ impl GridRenderer {
             let cell_attrs = cell.map(|c| state.highlights.get(c.highlight_id));
 
             if let Some(c) = cell {
-                // Reuse existing push_cell_glyph logic but force colors
-                // We manually construct a "fake" inverted style
+                if !c.is_empty() && !c.is_wide_spacer() {
+                    let text_color = cell_attrs
+                        .and_then(|a| a.background)
+                        .map(|c| u32_to_linear_rgba(c.0 >> 8))
+                        .unwrap_or(default_bg);
+
+                    let attrs = cell_attrs.unwrap_or_else(|| state.highlights.get(0));
+                    let style = Style::from_flags(
+                        attrs.style.contains(StyleFlags::BOLD),
+                        attrs.style.contains(StyleFlags::ITALIC),
+                    );
+
+                    // Use shaped rendering for the cursor character
+                    let text_run = TextRun {
+                        text: &c.text,
+                        style,
+                    };
+                    let shaped = self.shaper.shape_with_collection(&text_run, &mut self.collection);
+                    self.push_shaped_run(ctx, geom.x, geom.y, &shaped, text_color);
+                }
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn prepare_cursor(
+        &mut self,
+        ctx: &GpuContext,
+        state: &EditorState,
+        default_bg: [f32; 4],
+        default_fg: [f32; 4],
+        x_offset: f32,
+        y_offset: f32,
+    ) {
+        let cursor = &state.cursor;
+        if !cursor.visible || !cursor.blink_visible {
+            return;
+        }
+
+        // Only draw cursor on the main grid (ID 1).
+        if cursor.grid != 1 {
+            return;
+        }
+
+        let mode = state.current_mode();
+        let grid = state.main_grid();
+
+        if cursor.row >= grid.height() || cursor.col >= grid.width() {
+            return;
+        }
+
+        let mut geom = compute_cursor_geometry(
+            mode.cursor_shape,
+            cursor.row,
+            cursor.col,
+            self.cell_width,
+            self.cell_height,
+            mode.cell_percentage,
+        );
+
+        geom.x += x_offset;
+        geom.y += y_offset;
+
+        let cursor_color = if mode.attr_id > 0 {
+            if let Some(fg) = state.highlights.get(mode.attr_id).foreground {
+                u32_to_linear_rgba(fg.0 >> 8)
+            } else {
+                default_fg
+            }
+        } else {
+            default_fg
+        };
+
+        self.batcher
+            .push_background(geom.x, geom.y, geom.width, geom.height, cursor_color);
+
+        // Block cursor: render character with inverted colors
+        if mode.cursor_shape == CursorShape::Block {
+            let cell = grid.get(cursor.row, cursor.col);
+            let cell_attrs = cell.map(|c| state.highlights.get(c.highlight_id));
+
+            if let Some(c) = cell {
                 if !c.is_empty() && !c.is_wide_spacer() {
                     let text_color = cell_attrs
                         .and_then(|a| a.background)
@@ -534,6 +650,7 @@ impl GridRenderer {
 
 #[derive(Debug, thiserror::Error)]
 pub enum GridRendererError {
+    #[cfg(not(target_os = "macos"))]
     #[error("Font error: {0}")]
     Font(#[from] super::font::FontError),
     #[cfg(target_os = "macos")]

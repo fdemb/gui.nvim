@@ -1,17 +1,42 @@
 use super::atlas::GlyphAtlas;
 use super::batch::RenderBatcher;
 use super::color::u32_to_linear_rgba;
-use super::font::{Collection, FontConfig, GlyphCacheKey, RunIterator, ShapedGlyph, Shaper, Style, TextRun};
+use super::font::{
+    Collection, FontConfig, GlyphCacheKey, RunIterator, ShapedGlyph, Shaper, ShapingCache,
+    ShapingCacheKey, Style, TextRun,
+};
 use super::geometry::{compute_cursor_geometry, compute_decoration_geometry};
 use super::GpuContext;
 use crate::config::FontSettings;
 use crate::editor::{CursorShape, EditorState, HighlightAttributes, StyleFlags, UnderlineStyle};
+use std::time::{Duration, Instant};
+
+/// Statistics collected during prepare() for performance analysis.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct PrepareStats {
+    pub cells_processed: usize,
+    pub runs_processed: usize,
+    pub shape_calls: usize,
+    pub glyphs_shaped: usize,
+    pub glyph_cache_hits: usize,
+    pub glyph_cache_misses: usize,
+    // Shaping cache stats
+    pub shaping_cache_hits: usize,
+    pub shaping_cache_misses: usize,
+    // Timing breakdown
+    pub time_backgrounds: Duration,
+    pub time_shaping: Duration,
+    pub time_glyph_lookup: Duration,
+    pub time_batching: Duration,
+}
 
 pub struct GridRenderer {
     batcher: RenderBatcher,
     atlas: GlyphAtlas,
     collection: Collection,
     shaper: Shaper,
+    /// Cache for shaped text runs to avoid redundant HarfBuzz calls.
+    shaping_cache: ShapingCache,
     cell_width: f32,
     cell_height: f32,
     /// Distance from the top of the cell to the baseline.
@@ -48,6 +73,7 @@ impl GridRenderer {
             atlas,
             collection,
             shaper,
+            shaping_cache: ShapingCache::new(),
             cell_width,
             cell_height,
             baseline_offset,
@@ -71,8 +97,12 @@ impl GridRenderer {
         self.baseline_offset = metrics.ascent + (metrics.line_gap / 2.0);
 
         self.atlas.clear(ctx);
-        self.atlas.prepopulate_ascii(ctx, &mut collection, Style::Regular);
+        self.atlas
+            .prepopulate_ascii(ctx, &mut collection, Style::Regular);
         self.collection = collection;
+
+        // Clear shaping cache - cached results are invalid with new font
+        self.shaping_cache.clear();
 
         Ok(())
     }
@@ -93,11 +123,12 @@ impl GridRenderer {
         default_fg: [f32; 4],
         x_offset: f32,
         y_offset: f32,
-    ) {
+    ) -> PrepareStats {
         self.batcher.clear();
-        self.prepare_grid_cells(ctx, state, default_bg, default_fg, x_offset, y_offset);
+        let stats = self.prepare_grid_cells(ctx, state, default_bg, default_fg, x_offset, y_offset);
         self.prepare_cursor(ctx, state, default_bg, default_fg, x_offset, y_offset);
         self.batcher.upload(ctx);
+        stats
     }
 
     fn prepare_grid_cells(
@@ -108,7 +139,8 @@ impl GridRenderer {
         default_fg: [f32; 4],
         x_offset: f32,
         y_offset: f32,
-    ) {
+    ) -> PrepareStats {
+        let mut stats = PrepareStats::default();
         let grid = state.main_grid();
         let highlights = &state.highlights;
 
@@ -116,12 +148,15 @@ impl GridRenderer {
             let y = row_idx as f32 * self.cell_height + y_offset;
 
             // First pass: backgrounds and decorations (cell by cell)
+            let bg_start = Instant::now();
             let mut last_hl_id = u64::MAX;
             let mut last_bg = default_bg;
             let mut last_fg = default_fg;
             let mut last_attrs = highlights.get(0);
 
             for (col_idx, cell) in row_cells.iter().enumerate() {
+                stats.cells_processed += 1;
+
                 if cell.highlight_id != last_hl_id {
                     last_hl_id = cell.highlight_id;
                     last_attrs = highlights.get(last_hl_id);
@@ -134,6 +169,7 @@ impl GridRenderer {
                 self.push_cell_background(x, y, last_bg, default_bg);
                 self.push_cell_decorations(x, y, last_attrs, last_fg);
             }
+            stats.time_backgrounds += bg_start.elapsed();
 
             // Second pass: text runs with shaping
             for run in RunIterator::new(row_cells, highlights) {
@@ -141,20 +177,49 @@ impl GridRenderer {
                     continue;
                 }
 
+                stats.runs_processed += 1;
+
                 let attrs = highlights.get(run.highlight_id);
                 let (_, fg) = self.resolve_colors(attrs, default_bg, default_fg);
 
-                let text_run = TextRun {
-                    text: &run.text,
-                    style: run.style,
-                };
+                // Try to get shaped glyphs from cache
+                let cache_key = ShapingCacheKey::new(&run.text, run.style);
+                let shape_start = Instant::now();
 
-                let shaped = self.shaper.shape_with_collection(&text_run, &mut self.collection);
+                // Check cache and clone if found, otherwise shape
+                let shaped: Vec<ShapedGlyph> =
+                    if let Some(cached) = self.shaping_cache.get(cache_key) {
+                        stats.shaping_cache_hits += 1;
+                        stats.glyphs_shaped += cached.glyphs.len();
+                        cached.glyphs.clone()
+                    } else {
+                        stats.shaping_cache_misses += 1;
+                        stats.shape_calls += 1;
+
+                        let text_run = TextRun {
+                            text: &run.text,
+                            style: run.style,
+                        };
+
+                        let new_shaped = self
+                            .shaper
+                            .shape_with_collection(&text_run, &mut self.collection);
+                        stats.glyphs_shaped += new_shaped.len();
+
+                        // Insert into cache
+                        self.shaping_cache.insert(cache_key, new_shaped.clone());
+
+                        new_shaped
+                    };
+                stats.time_shaping += shape_start.elapsed();
+
                 let run_x = run.start_col as f32 * self.cell_width + x_offset;
 
-                self.push_shaped_run(ctx, run_x, y, &shaped, fg);
+                self.push_shaped_run_with_stats(ctx, run_x, y, &shaped, fg, &mut stats);
             }
         }
+
+        stats
     }
 
     fn push_shaped_run(
@@ -165,14 +230,40 @@ impl GridRenderer {
         shaped: &[ShapedGlyph],
         fg: [f32; 4],
     ) {
+        let mut stats = PrepareStats::default();
+        self.push_shaped_run_with_stats(ctx, run_x, y, shaped, fg, &mut stats);
+    }
+
+    fn push_shaped_run_with_stats(
+        &mut self,
+        ctx: &GpuContext,
+        run_x: f32,
+        y: f32,
+        shaped: &[ShapedGlyph],
+        fg: [f32; 4],
+        stats: &mut PrepareStats,
+    ) {
         let mut x = run_x;
         let baseline_y = y + self.baseline_offset;
 
         for glyph in shaped {
             let key = GlyphCacheKey::new(glyph.glyph_id, glyph.font_index);
 
-            if let Some(cached) = self.atlas.get_glyph_by_id(ctx, &self.collection, key) {
+            let lookup_start = Instant::now();
+            let (cached_opt, was_cache_hit) =
+                self.atlas
+                    .get_glyph_by_id_with_stats(ctx, &self.collection, key);
+            stats.time_glyph_lookup += lookup_start.elapsed();
+
+            if was_cache_hit {
+                stats.glyph_cache_hits += 1;
+            } else {
+                stats.glyph_cache_misses += 1;
+            }
+
+            if let Some(cached) = cached_opt {
                 if cached.width > 0 && cached.height > 0 {
+                    let batch_start = Instant::now();
                     let atlas_size = self.atlas.atlas_size() as f32;
                     let uv_x = cached.atlas_x as f32 / atlas_size;
                     let uv_y = cached.atlas_y as f32 / atlas_size;
@@ -199,6 +290,7 @@ impl GridRenderer {
                         fg,
                         cached.is_colored,
                     );
+                    stats.time_batching += batch_start.elapsed();
                 }
             }
 
@@ -366,8 +458,9 @@ impl GridRenderer {
                         text: &c.text,
                         style,
                     };
-                    let shaped =
-                        self.shaper.shape_without_ligatures(&text_run, &mut self.collection);
+                    let shaped = self
+                        .shaper
+                        .shape_without_ligatures(&text_run, &mut self.collection);
                     self.push_shaped_run(ctx, geom.x, geom.y, &shaped, text_color);
                 }
             }

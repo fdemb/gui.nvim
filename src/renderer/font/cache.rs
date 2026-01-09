@@ -249,7 +249,12 @@ mod tests {
         let mut cache = ShapedGlyphCache::new();
 
         let glyph_id = 65; // 'A'
-        let styles = [Style::Regular, Style::Bold, Style::Italic, Style::BoldItalic];
+        let styles = [
+            Style::Regular,
+            Style::Bold,
+            Style::Italic,
+            Style::BoldItalic,
+        ];
 
         for (i, style) in styles.iter().enumerate() {
             let key = GlyphCacheKey::new(glyph_id, CollectionIndex::primary(*style));

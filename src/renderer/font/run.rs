@@ -198,11 +198,7 @@ mod tests {
 
     #[test]
     fn test_wide_spacer_at_start() {
-        let cells = vec![
-            make_wide_spacer(0),
-            make_cell("a", 0),
-            make_cell("b", 0),
-        ];
+        let cells = vec![make_wide_spacer(0), make_cell("a", 0), make_cell("b", 0)];
         let highlights = HighlightMap::new();
 
         let runs: Vec<_> = RunIterator::new(&cells, &highlights).collect();
@@ -234,11 +230,7 @@ mod tests {
 
     #[test]
     fn test_bold_style_detection() {
-        let cells = vec![
-            make_cell("a", 0),
-            make_cell("b", 1),
-            make_cell("c", 1),
-        ];
+        let cells = vec![make_cell("a", 0), make_cell("b", 1), make_cell("c", 1)];
 
         let mut highlights = HighlightMap::new();
         highlights.define(

@@ -86,11 +86,25 @@ impl GlyphAtlas {
         collection: &Collection,
         key: GlyphCacheKey,
     ) -> Option<ShapedCachedGlyph> {
+        self.get_glyph_by_id_with_stats(ctx, collection, key).0
+    }
+
+    /// Get a glyph by ID with cache hit/miss tracking for performance analysis.
+    /// Returns (Option<ShapedCachedGlyph>, was_cache_hit).
+    pub fn get_glyph_by_id_with_stats(
+        &mut self,
+        ctx: &GpuContext,
+        collection: &Collection,
+        key: GlyphCacheKey,
+    ) -> (Option<ShapedCachedGlyph>, bool) {
         if let Some(cached_result) = self.cache.get(&key) {
-            return cached_result.copied();
+            return (cached_result.copied(), true);
         }
 
-        let face = collection.get_face(key.font_index)?;
+        let face = match collection.get_face(key.font_index) {
+            Some(f) => f,
+            None => return (None, false),
+        };
         let rasterized = match face.render_glyph(key.glyph_id) {
             Ok(g) => g,
             Err(e) => {
@@ -101,7 +115,7 @@ impl GlyphAtlas {
                     e
                 );
                 self.cache.insert(key, None);
-                return None;
+                return (None, false);
             }
         };
 
@@ -116,10 +130,13 @@ impl GlyphAtlas {
                 is_colored: rasterized.buffer.is_colored(),
             };
             self.cache.insert(key, Some(cached));
-            return Some(cached);
+            return (Some(cached), false);
         }
 
-        let (atlas_x, atlas_y) = self.allocate(rasterized.width, rasterized.height)?;
+        let (atlas_x, atlas_y) = match self.allocate(rasterized.width, rasterized.height) {
+            Some(coords) => coords,
+            None => return (None, false),
+        };
         self.upload(ctx, &rasterized, atlas_x, atlas_y);
 
         let cached = ShapedCachedGlyph {
@@ -133,7 +150,7 @@ impl GlyphAtlas {
         };
 
         self.cache.insert(key, Some(cached));
-        Some(cached)
+        (Some(cached), false)
     }
 
     /// Allocate space in the atlas using row-based packing.
@@ -375,7 +392,10 @@ mod tests {
 
         let result = cache.get(&key);
         assert!(result.is_some(), "Entry should exist");
-        assert!(result.unwrap().is_none(), "Entry should be marked as failed");
+        assert!(
+            result.unwrap().is_none(),
+            "Entry should be marked as failed"
+        );
     }
 
     #[test]
@@ -396,7 +416,12 @@ mod tests {
 
     #[test]
     fn test_collection_index_styles() {
-        let styles = [Style::Regular, Style::Bold, Style::Italic, Style::BoldItalic];
+        let styles = [
+            Style::Regular,
+            Style::Bold,
+            Style::Italic,
+            Style::BoldItalic,
+        ];
 
         for style in styles {
             let index = CollectionIndex::primary(style);

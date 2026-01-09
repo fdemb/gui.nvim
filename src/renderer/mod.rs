@@ -15,6 +15,7 @@ use grid_renderer::GridRenderer;
 use pipeline::RenderPipeline;
 
 use std::sync::Arc;
+use std::time::Instant;
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
@@ -93,7 +94,11 @@ impl Renderer {
         x_offset: f32,
         y_offset: f32,
     ) -> Result<(), wgpu::SurfaceError> {
-        self.grid_renderer.prepare(
+        let frame_start = Instant::now();
+
+        // Phase 1: Prepare grid (batching, shaping, etc.)
+        let prepare_start = Instant::now();
+        let prepare_stats = self.grid_renderer.prepare(
             &self.ctx,
             state,
             self.default_bg,
@@ -101,18 +106,27 @@ impl Renderer {
             x_offset,
             y_offset,
         );
+        let prepare_duration = prepare_start.elapsed();
 
+        // Phase 2: Recreate atlas bind group (INEFFICIENCY: done every frame)
+        let bind_group_start = Instant::now();
         self.atlas_bind_group = self.pipeline.create_atlas_bind_group(
             &self.ctx,
             self.grid_renderer.atlas().texture_view(),
             self.grid_renderer.atlas().sampler(),
         );
+        let bind_group_duration = bind_group_start.elapsed();
 
+        // Phase 3: Get swap chain texture
+        let swap_chain_start = Instant::now();
         let output = self.ctx.get_current_texture()?;
         let view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
+        let swap_chain_duration = swap_chain_start.elapsed();
 
+        // Phase 4: Create command encoder and render pass
+        let encode_start = Instant::now();
         let mut encoder = self
             .ctx
             .device
@@ -164,9 +178,54 @@ impl Renderer {
                 render_pass.draw(0..6, 0..batcher.decorations().instance_count());
             }
         }
+        let encode_duration = encode_start.elapsed();
 
+        // Phase 5: Submit and present
+        let submit_start = Instant::now();
         self.ctx.queue.submit(std::iter::once(encoder.finish()));
         output.present();
+        let submit_duration = submit_start.elapsed();
+
+        let frame_duration = frame_start.elapsed();
+
+        // Log performance metrics
+        let batcher = self.grid_renderer.batcher();
+        log::debug!(
+            "[PERF] Frame: {:>6.2}ms | prepare: {:>6.2}ms | bind_group: {:>6.2}ms | swap: {:>6.2}ms | encode: {:>6.2}ms | submit: {:>6.2}ms",
+            frame_duration.as_secs_f64() * 1000.0,
+            prepare_duration.as_secs_f64() * 1000.0,
+            bind_group_duration.as_secs_f64() * 1000.0,
+            swap_chain_duration.as_secs_f64() * 1000.0,
+            encode_duration.as_secs_f64() * 1000.0,
+            submit_duration.as_secs_f64() * 1000.0,
+        );
+        log::debug!(
+            "[PERF] Batches: {} bg, {} glyphs, {} deco | Grid: {}x{} ({} cells)",
+            batcher.backgrounds().instance_count(),
+            batcher.glyphs().instance_count(),
+            batcher.decorations().instance_count(),
+            state.main_grid().width(),
+            state.main_grid().height(),
+            state.main_grid().width() * state.main_grid().height(),
+        );
+        log::debug!(
+            "[PERF] Prepare breakdown: cells={}, runs={}, shape_calls={}, glyphs_shaped={}, glyph_cache={}/{}, shaping_cache={}/{}",
+            prepare_stats.cells_processed,
+            prepare_stats.runs_processed,
+            prepare_stats.shape_calls,
+            prepare_stats.glyphs_shaped,
+            prepare_stats.glyph_cache_hits,
+            prepare_stats.glyph_cache_hits + prepare_stats.glyph_cache_misses,
+            prepare_stats.shaping_cache_hits,
+            prepare_stats.shaping_cache_hits + prepare_stats.shaping_cache_misses,
+        );
+        log::debug!(
+            "[PERF] Prepare timing: backgrounds={:.2}ms, shaping={:.2}ms, glyph_lookup={:.2}ms, batching={:.2}ms",
+            prepare_stats.time_backgrounds.as_secs_f64() * 1000.0,
+            prepare_stats.time_shaping.as_secs_f64() * 1000.0,
+            prepare_stats.time_glyph_lookup.as_secs_f64() * 1000.0,
+            prepare_stats.time_batching.as_secs_f64() * 1000.0,
+        );
 
         Ok(())
     }

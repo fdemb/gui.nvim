@@ -116,7 +116,9 @@ impl Collection {
             Style::Regular => return Some(base_face.clone()),
             Style::Bold => CTFontSymbolicTraits::TraitBold,
             Style::Italic => CTFontSymbolicTraits::TraitItalic,
-            Style::BoldItalic => CTFontSymbolicTraits::TraitBold | CTFontSymbolicTraits::TraitItalic,
+            Style::BoldItalic => {
+                CTFontSymbolicTraits::TraitBold | CTFontSymbolicTraits::TraitItalic
+            }
         };
 
         let ct_font = base_face.ct_font();
@@ -153,7 +155,11 @@ impl Collection {
         &entries[0].face
     }
 
-    pub fn resolve_glyph(&mut self, codepoint: u32, style: Style) -> Option<(CollectionIndex, u32)> {
+    pub fn resolve_glyph(
+        &mut self,
+        codepoint: u32,
+        style: Style,
+    ) -> Option<(CollectionIndex, u32)> {
         let entries = self.entries_for_style(style);
         for (idx, entry) in entries.iter().enumerate() {
             if let Some(glyph_id) = entry.face.glyph_index(codepoint) {
@@ -261,7 +267,10 @@ mod tests {
     #[test]
     fn test_collection_creation() {
         let collection = Collection::new("Menlo", 14.0, 72.0);
-        assert!(collection.is_ok(), "Should create collection from system font");
+        assert!(
+            collection.is_ok(),
+            "Should create collection from system font"
+        );
     }
 
     #[test]

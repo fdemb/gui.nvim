@@ -285,8 +285,7 @@ impl Shaper {
                     style: run.style,
                 };
 
-                let shaped =
-                    self.shape_with_face_and_features(&sub_run, face, font_index, false);
+                let shaped = self.shape_with_face_and_features(&sub_run, face, font_index, false);
 
                 for mut glyph in shaped {
                     glyph.cluster += cluster_offset;
@@ -322,8 +321,7 @@ impl Shaper {
         // Reset and configure buffer
         self.buffer.reset();
         self.buffer.add_str(run.text);
-        self.buffer
-            .set_direction(harfbuzz_sys::HB_DIRECTION_LTR);
+        self.buffer.set_direction(harfbuzz_sys::HB_DIRECTION_LTR);
         self.buffer.guess_segment_properties();
 
         // Shape with appropriate features
@@ -454,10 +452,7 @@ mod tests {
 
         let shaped = shaper.shape_with_collection(&run, &mut collection);
 
-        assert!(
-            shaped.len() >= 11,
-            "Should produce at least 11 glyphs"
-        );
+        assert!(shaped.len() >= 11, "Should produce at least 11 glyphs");
     }
 
     #[test]
@@ -473,11 +468,7 @@ mod tests {
                 style: Style::Regular,
             };
             let shaped = shaper.shape(&run, &collection);
-            assert!(
-                !shaped.is_empty(),
-                "Should produce glyphs for '{}'",
-                seq
-            );
+            assert!(!shaped.is_empty(), "Should produce glyphs for '{}'", seq);
         }
     }
 

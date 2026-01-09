@@ -1,4 +1,5 @@
 use super::face::{Face, FaceError, FaceMetrics};
+use super::fallback::FallbackResolver;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Style {
@@ -57,6 +58,7 @@ pub struct Collection {
     metrics: FaceMetrics,
     size_pt: f32,
     dpi: f32,
+    fallback_resolver: FallbackResolver,
 }
 
 #[cfg(target_os = "macos")]
@@ -64,6 +66,7 @@ impl Collection {
     pub fn new(family: &str, size_pt: f32, dpi: f32) -> Result<Self, FaceError> {
         let regular_face = Face::new(family, size_pt, dpi)?;
         let metrics = *regular_face.metrics();
+        let size_px = regular_face.size_px();
 
         let bold_face = Face::new(&format!("{}-Bold", family), size_pt, dpi)
             .or_else(|_| Face::new(family, size_pt, dpi))?;
@@ -71,6 +74,8 @@ impl Collection {
             .or_else(|_| Face::new(family, size_pt, dpi))?;
         let bold_italic_face = Face::new(&format!("{}-BoldItalic", family), size_pt, dpi)
             .or_else(|_| Face::new(family, size_pt, dpi))?;
+
+        let fallback_resolver = FallbackResolver::new(regular_face.ct_font().clone(), size_px);
 
         Ok(Self {
             regular: vec![Entry {
@@ -92,6 +97,7 @@ impl Collection {
             metrics,
             size_pt,
             dpi,
+            fallback_resolver,
         })
     }
 
@@ -131,7 +137,7 @@ impl Collection {
             }
         }
 
-        if let Some(fallback_face) = self.discover_fallback(codepoint) {
+        if let Some(fallback_face) = self.fallback_resolver.discover(codepoint) {
             if let Some(glyph_id) = fallback_face.glyph_index(codepoint) {
                 let entries = self.entries_for_style_mut(style);
                 let idx = entries.len() as u16;
@@ -174,14 +180,8 @@ impl Collection {
         }
     }
 
-    fn discover_fallback(&self, codepoint: u32) -> Option<Face> {
-        let ch = char::from_u32(codepoint)?;
-        let text = ch.to_string();
-
-        let primary = self.primary_face(Style::Regular);
-        let fallback_ct_font = primary.create_for_string(&text);
-
-        Face::from_ct_font(fallback_ct_font, primary.size_px()).ok()
+    pub fn clear_fallback_cache(&mut self) {
+        self.fallback_resolver.clear_cache();
     }
 }
 

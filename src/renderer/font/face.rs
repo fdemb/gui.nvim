@@ -205,6 +205,15 @@ impl Face {
         &self.hb_font
     }
 
+    pub fn family_name(&self) -> Option<String> {
+        let name = unsafe { self.ct_font.family_name() };
+        Some(name.to_string())
+    }
+
+    pub fn ct_font(&self) -> &CFRetained<CTFont> {
+        &self.ct_font
+    }
+
     pub fn glyph_index(&self, codepoint: u32) -> Option<u32> {
         let ch = char::from_u32(codepoint)?;
         let mut unichars = [0u16; 2];

@@ -165,7 +165,10 @@ mod tests {
         let config = Config::default();
         assert_eq!(config.font.family, None);
         assert_eq!(config.font.size, None);
-        assert!(!config.performance.disable_throttling);
+        #[cfg(target_os = "macos")]
+        assert_eq!(config.performance.vsync, VsyncMode::Disabled);
+        #[cfg(not(target_os = "macos"))]
+        assert_eq!(config.performance.vsync, VsyncMode::MailboxIfAvailable);
     }
 
     #[test]
@@ -230,9 +233,9 @@ mod tests {
     fn test_parse_performance_config() {
         let toml = r#"
             [performance]
-            disable_throttling = true
+            vsync = "enabled"
         "#;
         let config: Config = toml::from_str(toml).unwrap();
-        assert!(config.performance.disable_throttling);
+        assert_eq!(config.performance.vsync, VsyncMode::Enabled);
     }
 }

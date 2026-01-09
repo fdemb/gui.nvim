@@ -1,14 +1,15 @@
-use gui_nvim::cli::CliAction;
-use gui_nvim::{cli, env, run};
+use clap::Parser;
+use gui_nvim::cli::{Cli, Command};
+use gui_nvim::{env, run};
 use log::info;
 
 fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
-    let args: Vec<String> = std::env::args().collect();
+    let cli = Cli::parse();
 
-    match cli::parse_args(args) {
-        CliAction::Env => match env::dump_env() {
+    match cli.command {
+        Some(Command::Env) => match env::dump_env() {
             Ok(count) => {
                 if let Some(path) = env::env_file_path() {
                     println!("Captured {} environment variables to:", count);
@@ -24,15 +25,7 @@ fn main() {
                 std::process::exit(1);
             }
         },
-        CliAction::Help => {
-            cli::print_help();
-            std::process::exit(0);
-        }
-        CliAction::Version => {
-            println!("gui.nvim {}", env!("CARGO_PKG_VERSION"));
-            std::process::exit(0);
-        }
-        CliAction::Run(nvim_args) => {
+        None => {
             match env::load_env() {
                 Ok(Some(count)) => {
                     info!("Loaded {} environment variables from config", count);
@@ -47,7 +40,7 @@ fn main() {
 
             info!("gui.nvim starting");
 
-            if let Err(e) = run(nvim_args) {
+            if let Err(e) = run(cli.nvim_args) {
                 log::error!("Application error: {}", e);
                 std::process::exit(1);
             }

@@ -20,9 +20,11 @@ pub enum VsyncMode {
 
 impl Default for VsyncMode {
     fn default() -> Self {
+        // macOS doesn't support mailbox and has bugs (or even kernel panics)
+        // when vsync is disabled, so we default to normal vsync
         #[cfg(target_os = "macos")]
         {
-            VsyncMode::Disabled
+            VsyncMode::Enabled
         }
         #[cfg(not(target_os = "macos"))]
         {

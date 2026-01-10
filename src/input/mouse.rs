@@ -122,46 +122,23 @@ impl ScrollDirection {
 }
 
 pub fn scroll_delta_to_direction(delta: MouseScrollDelta) -> Option<(ScrollDirection, u32)> {
-    match delta {
-        MouseScrollDelta::LineDelta(x, y) => {
-            if y.abs() > x.abs() {
-                if y > 0.0 {
-                    Some((ScrollDirection::Up, y.abs().ceil() as u32))
-                } else if y < 0.0 {
-                    Some((ScrollDirection::Down, y.abs().ceil() as u32))
-                } else {
-                    None
-                }
-            } else if x > 0.0 {
-                Some((ScrollDirection::Right, x.abs().ceil() as u32))
-            } else if x < 0.0 {
-                Some((ScrollDirection::Left, x.abs().ceil() as u32))
-            } else {
-                None
-            }
-        }
-        MouseScrollDelta::PixelDelta(delta) => {
-            // Convert pixel delta to lines (typically ~20 pixels per line)
-            const PIXELS_PER_LINE: f64 = 20.0;
-            let x_lines = delta.x / PIXELS_PER_LINE;
-            let y_lines = delta.y / PIXELS_PER_LINE;
+    const PIXELS_PER_LINE: f64 = 20.0;
 
-            if y_lines.abs() > x_lines.abs() {
-                if y_lines > 0.5 {
-                    Some((ScrollDirection::Up, y_lines.abs().ceil() as u32))
-                } else if y_lines < -0.5 {
-                    Some((ScrollDirection::Down, y_lines.abs().ceil() as u32))
-                } else {
-                    None
-                }
-            } else if x_lines > 0.5 {
-                Some((ScrollDirection::Right, x_lines.abs().ceil() as u32))
-            } else if x_lines < -0.5 {
-                Some((ScrollDirection::Left, x_lines.abs().ceil() as u32))
-            } else {
-                None
-            }
-        }
+    let (x, y, threshold) = match delta {
+        MouseScrollDelta::LineDelta(x, y) => (x as f64, y as f64, 0.0),
+        MouseScrollDelta::PixelDelta(d) => (d.x / PIXELS_PER_LINE, d.y / PIXELS_PER_LINE, 0.5),
+    };
+
+    let (value, dir_pos, dir_neg) = if y.abs() > x.abs() {
+        (y, ScrollDirection::Up, ScrollDirection::Down)
+    } else {
+        (x, ScrollDirection::Left, ScrollDirection::Right)
+    };
+
+    match value {
+        v if v > threshold => Some((dir_pos, v.abs().ceil() as u32)),
+        v if v < -threshold => Some((dir_neg, v.abs().ceil() as u32)),
+        _ => None,
     }
 }
 

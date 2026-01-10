@@ -34,7 +34,7 @@ impl NeovimProcess {
 
         let current_dir = env::current_dir()?;
         if current_dir == PathBuf::from("/") {
-            log::warn!("Current directory is root. This is probably not what you want. Changing to home directory.");
+            log::warn!("Current directory is /. This is probably not what you want. Changing to home directory.");
             env::set_current_dir(env::home_dir().expect("Could not find home directory"))?;
         }
 

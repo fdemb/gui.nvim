@@ -80,7 +80,6 @@ impl FontSettings {
         // Handle list of fonts (take first)
         let first_font = guifont.split(',').next().unwrap_or(guifont);
 
-        // Try parsing "Family:hSize" (macOS/Windows style)
         if let Some((family, size_str)) = first_font.rsplit_once(":h") {
             let size = size_str.parse::<f32>().ok();
             let family = family.replace("\\ ", " ");
@@ -88,17 +87,6 @@ impl FontSettings {
                 family: Some(family),
                 size,
             });
-        }
-
-        // Try parsing "Family Size" (GTK/X11 style)
-        if let Some((family, size_str)) = first_font.rsplit_once(' ') {
-            if let Ok(size) = size_str.parse::<f32>() {
-                let family = family.replace("\\ ", " ");
-                return Some(Self {
-                    family: Some(family),
-                    size: Some(size),
-                });
-            }
         }
 
         // Just family
@@ -139,23 +127,20 @@ impl Config {
     }
 }
 
-fn config_file_path() -> Option<PathBuf> {
+/// Returns the gui-nvim config directory.
+/// Location: `~/.config/gui-nvim/`
+pub fn config_dir() -> Option<PathBuf> {
     if let Some(config_dir) = std::env::var_os("XDG_CONFIG_HOME") {
-        Some(
-            PathBuf::from(config_dir)
-                .join("gui-nvim")
-                .join("config.toml"),
-        )
+        Some(PathBuf::from(config_dir).join("gui-nvim"))
     } else if let Some(home) = std::env::var_os("HOME") {
-        Some(
-            PathBuf::from(home)
-                .join(".config")
-                .join("gui-nvim")
-                .join("config.toml"),
-        )
+        Some(PathBuf::from(home).join(".config").join("gui-nvim"))
     } else {
         None
     }
+}
+
+fn config_file_path() -> Option<PathBuf> {
+    return config_dir().map(|p| p.join("config.toml"));
 }
 
 #[cfg(test)]
@@ -168,7 +153,7 @@ mod tests {
         assert_eq!(config.font.family, None);
         assert_eq!(config.font.size, None);
         #[cfg(target_os = "macos")]
-        assert_eq!(config.performance.vsync, VsyncMode::Disabled);
+        assert_eq!(config.performance.vsync, VsyncMode::Enabled);
         #[cfg(not(target_os = "macos"))]
         assert_eq!(config.performance.vsync, VsyncMode::MailboxIfAvailable);
     }
@@ -206,13 +191,6 @@ mod tests {
     #[test]
     fn test_from_guifont_escaped_space() {
         let settings = FontSettings::from_guifont("Fira\\ Code:h14").unwrap();
-        assert_eq!(settings.family.as_deref(), Some("Fira Code"));
-        assert_eq!(settings.size, Some(14.0));
-    }
-
-    #[test]
-    fn test_from_guifont_gtk_style() {
-        let settings = FontSettings::from_guifont("Fira Code 14").unwrap();
         assert_eq!(settings.family.as_deref(), Some("Fira Code"));
         assert_eq!(settings.size, Some(14.0));
     }

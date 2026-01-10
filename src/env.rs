@@ -13,6 +13,8 @@ use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 
+use crate::config::config_dir;
+
 /// Environment variables to exclude from capture.
 /// These are either security-sensitive or session-specific.
 const EXCLUDED_VARS: &[&str] = &[
@@ -85,19 +87,7 @@ const EXCLUDED_SUFFIXES: &[&str] = &[
 /// Returns the path to the environment file.
 /// Location: `~/.config/gui-nvim/env`
 pub fn env_file_path() -> Option<PathBuf> {
-    dirs_next().map(|p| p.join("env"))
-}
-
-/// Returns the gui-nvim config directory.
-/// Location: `~/.config/gui-nvim/`
-fn dirs_next() -> Option<PathBuf> {
-    if let Some(config_dir) = std::env::var_os("XDG_CONFIG_HOME") {
-        Some(PathBuf::from(config_dir).join("gui-nvim"))
-    } else if let Some(home) = std::env::var_os("HOME") {
-        Some(PathBuf::from(home).join(".config").join("gui-nvim"))
-    } else {
-        None
-    }
+    return config_dir().map(|p| p.join("env"));
 }
 
 /// Captures current environment variables to the config file.

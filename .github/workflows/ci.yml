@@ -1,0 +1,137 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-action@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy -- -D warnings
+
+      - name: Run tests
+        run: cargo test
+
+  build:
+    needs: test
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          # - os: ubuntu-latest
+          #   target: x86_64-unknown-linux-gnu
+          # - os: windows-latest
+          #   target: x86_64-pc-windows-msvc
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-action@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.target }}
+          path: |
+            target/${{ matrix.target }}/release/gui-nvim
+            target/${{ matrix.target }}/release/gui-nvim.exe
+
+  bundle-macos:
+    needs: test
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-apple-darwin
+            arch: x86_64
+          - target: aarch64-apple-darwin
+            arch: aarch64
+
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup rust
+        uses: dtolnay/rust-action@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: cache cargo
+        uses: swatinem/rust-cache@v2
+        with:
+          key: bundle-${{ matrix.target }}
+
+      - name: install cargo-bundle
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-bundle
+
+      - name: bundle .app
+        run: cargo bundle --release --target ${{ matrix.target }}
+
+      - name: upload .app
+        uses: actions/upload-artifact@v4
+        with:
+          name: gui.nvim-${{ matrix.arch }}.app
+          path: target/${{ matrix.target }}/release/bundle/osx/*.app
+
+  # bundle-linux:
+  #   needs: test
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #
+  #     - name: Setup Rust
+  #       uses: dtolnay/rust-action@stable
+  #
+  #     - name: Cache cargo
+  #       uses: Swatinem/rust-cache@v2
+  #       with:
+  #         key: bundle-linux
+  #
+  #     - name: Install cargo-bundle
+  #       uses: taiki-e/install-action@v2
+  #       with:
+  #         tool: cargo-bundle
+  #
+  #     - name: Bundle .deb
+  #       run: cargo bundle --release --format deb
+  #
+  #     - name: Upload .deb
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: gui.nvim.deb
+  #         path: target/release/bundle/deb/*.deb

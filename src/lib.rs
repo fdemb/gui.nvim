@@ -22,7 +22,6 @@ pub fn run(args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
 
     let proxy = event_loop.create_proxy();
 
-    // Register embedded fonts
     font_loader::register_embedded_fonts();
 
     let config = config::Config::load();

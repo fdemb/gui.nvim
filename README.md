@@ -27,20 +27,14 @@ A Neovim GUI focusing on simplicity and performance.
 git clone https://github.com/fdemb/gui.nvim.git
 cd gui.nvim
 
-# Build and install to /Applications
-make install
+# Install cargo-bundle if you don't have it
+cargo install cargo-bundle
 
-# Or build a universal binary (Intel + Apple Silicon)
-make install-universal
-```
+# Build and create the app bundle
+cargo bundle --release
 
-### Build options
-
-```sh
-make help          # Show all available targets
-make binary        # Build release binary only
-make app           # Create gui.nvim.app bundle
-make dmg           # Create distributable DMG
+# Install to /Applications
+cp -r target/release/bundle/osx/gui.nvim.app /Applications/
 ```
 
 ## Usage

@@ -52,3 +52,11 @@ opt-level = 1
 [profile.release]
 lto = true
 codegen-units = 1
+
+[package.metadata.bundle]
+name = "gui.nvim"
+identifier = "com.github.gui-nvim"
+icon = ["assets/icons/gui-nvim.icns"]
+category = "Developer Tool"
+short_description = "GPU-accelerated Neovim GUI"
+osx_minimum_system_version = "11.0"

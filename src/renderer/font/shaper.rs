@@ -163,8 +163,6 @@ impl Shaper {
         ]
     }
 
-    /// Features with ligatures and contextual alternates disabled.
-    /// Used for cursor rendering where we need the standalone glyph.
     fn no_ligature_features() -> Vec<harfbuzz_sys::hb_feature_t> {
         vec![
             // calt - contextual alternates (disabled)
@@ -264,8 +262,7 @@ impl Shaper {
         }
     }
 
-    /// Shape text without ligatures. Used for cursor rendering where we need
-    /// the standalone glyph for a single character, not a ligature.
+    #[allow(dead_code)]
     pub fn shape_without_ligatures(
         &mut self,
         run: &TextRun,

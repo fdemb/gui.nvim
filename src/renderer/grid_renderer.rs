@@ -398,7 +398,6 @@ impl GridRenderer {
             return;
         }
 
-        // Only draw cursor on the main grid (ID 1).
         if cursor.grid != 1 {
             return;
         }
@@ -422,51 +421,50 @@ impl GridRenderer {
         geom.x += x_offset;
         geom.y += y_offset;
 
-        let cursor_color = if mode.attr_id > 0 {
-            if let Some(fg) = state.highlights.get(mode.attr_id).foreground {
-                u32_to_linear_rgba(fg.0 >> 8)
-            } else {
-                default_fg
-            }
-        } else {
-            default_fg
+        let hl = state.highlights.get(mode.attr_id);
+        let cursor_color = match (mode.attr_id, hl.background, hl.foreground) {
+            (1.., Some(bg), _) => u32_to_linear_rgba(bg.0 >> 8),
+            (1.., None, Some(fg)) => u32_to_linear_rgba(fg.0 >> 8),
+            _ => default_fg,
         };
 
         self.batcher
             .push_background(geom.x, geom.y, geom.width, geom.height, cursor_color);
 
-        // Block cursor: render character with inverted colors
-        if mode.cursor_shape == CursorShape::Block {
-            let cell = grid.get(cursor.row, cursor.col);
-            let cell_attrs = cell.map(|c| state.highlights.get(c.highlight_id));
-
-            if let Some(c) = cell {
-                if !c.is_empty() && !c.is_wide_spacer() {
-                    let text_color = cell_attrs
-                        .and_then(|a| a.background)
-                        .map(|c| u32_to_linear_rgba(c.0 >> 8))
-                        .unwrap_or(default_bg);
-
-                    let attrs = cell_attrs.unwrap_or_else(|| state.highlights.get(0));
-                    let style = Style::from_flags(
-                        attrs.style.contains(StyleFlags::BOLD),
-                        attrs.style.contains(StyleFlags::ITALIC),
-                    );
-
-                    // Use shaped rendering for the cursor character.
-                    // Disable ligatures so the standalone glyph matches the cell position.
-                    // The cursor background covers the underlying ligature anyway.
-                    let text_run = TextRun {
-                        text: &c.text,
-                        style,
-                    };
-                    let shaped = self
-                        .shaper
-                        .shape_without_ligatures(&text_run, &mut self.collection);
-                    self.push_shaped_run(ctx, geom.x, geom.y, &shaped, text_color);
-                }
-            }
+        if mode.cursor_shape != CursorShape::Block {
+            return;
         }
+
+        let Some(c) = grid.get(cursor.row, cursor.col) else {
+            return;
+        };
+
+        if c.is_empty() || c.is_wide_spacer() {
+            return;
+        }
+
+        let cell_attrs = state.highlights.get(c.highlight_id);
+        let text_color = match (mode.attr_id, hl.foreground) {
+            (1.., Some(fg)) => u32_to_linear_rgba(fg.0 >> 8),
+            _ => cell_attrs
+                .background
+                .map(|c| u32_to_linear_rgba(c.0 >> 8))
+                .unwrap_or(default_bg),
+        };
+
+        let style = Style::from_flags(
+            cell_attrs.style.contains(StyleFlags::BOLD),
+            cell_attrs.style.contains(StyleFlags::ITALIC),
+        );
+
+        let text_run = TextRun {
+            text: &c.text,
+            style,
+        };
+        let shaped = self
+            .shaper
+            .shape_with_collection(&text_run, &mut self.collection);
+        self.push_shaped_run(ctx, geom.x, geom.y, &shaped, text_color);
     }
 }
 

@@ -30,6 +30,7 @@ pub struct GuiApp {
     editor_state: EditorState,
     render_loop: RenderLoop,
     settings: WindowSettings,
+    current_scale_factor: f64,
 }
 
 impl GuiApp {
@@ -45,6 +46,7 @@ impl GuiApp {
             editor_state: EditorState::new(DEFAULT_COLS as usize, DEFAULT_ROWS as usize),
             render_loop: RenderLoop::new(),
             settings: WindowSettings::new(),
+            current_scale_factor: 1.0,
         }
     }
 
@@ -74,7 +76,8 @@ impl GuiApp {
         match event_loop.create_window(window_attrs) {
             Ok(window) => {
                 log::info!("Window created: {:?}", window.id());
-                self.update_padding(window.scale_factor());
+                self.current_scale_factor = window.scale_factor();
+                self.update_padding(self.current_scale_factor);
                 let window = Arc::new(window);
                 self.window = Some(window.clone());
 
@@ -300,11 +303,14 @@ impl ApplicationHandler<UserEvent> for GuiApp {
             }
 
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
-                log::debug!("Scale factor changed: {}", scale_factor);
-                self.update_padding(scale_factor);
-                let _ = self
-                    .event_proxy
-                    .send_event(UserEvent::GUI(GUIEvent::ScaleFactorChanged(scale_factor)));
+                if (self.current_scale_factor - scale_factor).abs() >= f64::EPSILON {
+                    log::debug!("Scale factor changed: {}", scale_factor);
+                    self.current_scale_factor = scale_factor;
+                    self.update_padding(scale_factor);
+                    let _ = self
+                        .event_proxy
+                        .send_event(UserEvent::GUI(GUIEvent::ScaleFactorChanged(scale_factor)));
+                }
             }
 
             WindowEvent::Focused(focused) => {

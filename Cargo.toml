@@ -13,7 +13,7 @@ rmpv = "1"
 async-trait = "0.1"
 
 # Async runtime
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "process", "io-util", "macros"] }
 
 # Windowing
 winit = "0.30.12"
@@ -23,7 +23,6 @@ wgpu = "28.0.0"
 bytemuck = { version = "1", features = ["derive"] }
 
 # Text shaping
-harfbuzz_rs = "2.0"
 harfbuzz-sys = "0.5"
 
 # CLI

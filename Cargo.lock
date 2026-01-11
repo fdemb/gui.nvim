@@ -903,7 +903,6 @@ dependencies = [
  "compact_str",
  "env_logger",
  "harfbuzz-sys",
- "harfbuzz_rs",
  "log",
  "nvim-rs",
  "objc2 0.6.3",
@@ -944,16 +943,6 @@ dependencies = [
  "foreign-types 0.3.2",
  "freetype",
  "pkg-config",
-]
-
-[[package]]
-name = "harfbuzz_rs"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "58c18cfc23920d010f7637b86240a5f8892dfdbcb4f0e60828f8a9dc6ff5521d"
-dependencies = [
- "bitflags 1.3.2",
- "harfbuzz-sys",
 ]
 
 [[package]]

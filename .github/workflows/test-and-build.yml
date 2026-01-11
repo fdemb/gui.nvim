@@ -25,9 +25,25 @@ jobs:
       run: cargo install cargo-bundle
     - name: Bundle the macOS .app
       run: cargo bundle --release
+    - name: Zip .app
+      run: mkdir releases && zip -r releases/gui.nvim.app.zip target/release/bundle/osx/*.app
     - name: Upload .app artifact
       uses: actions/upload-artifact@v4
       with:
-        name: gui.nvim.app
-        path: target/release/bundle/osx/*.app
+        name: gui.nvim.app.zip
+        path: gui.nvim.app.zip
+    - name: Update tip release
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        git push origin :refs/tags/nightly || true
 
+        git tag -f nightly
+        git push origin nightly
+
+        gh release delete nightly --yes || true
+        gh release create nightly \
+          --title "Nightly Build" \
+          --notes "Latest build from main branch. Updated: $(date -u)" \
+          --prerelease \
+          ./releases/*

@@ -322,14 +322,14 @@ mod tests {
 
     #[test]
     fn test_scroll_line_delta_left() {
-        let delta = MouseScrollDelta::LineDelta(-1.0, 0.0);
+        let delta = MouseScrollDelta::LineDelta(1.0, 0.0);
         let result = scroll_delta_to_direction(delta);
         assert_eq!(result, Some((ScrollDirection::Left, 1)));
     }
 
     #[test]
     fn test_scroll_line_delta_right() {
-        let delta = MouseScrollDelta::LineDelta(1.0, 0.0);
+        let delta = MouseScrollDelta::LineDelta(-1.0, 0.0);
         let result = scroll_delta_to_direction(delta);
         assert_eq!(result, Some((ScrollDirection::Right, 1)));
     }

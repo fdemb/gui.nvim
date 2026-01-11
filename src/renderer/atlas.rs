@@ -310,23 +310,18 @@ mod tests {
     fn test_atlas_allocation_row_wrap() {
         let mut current_row_x = 1020u32;
         let mut current_row_y = 0u32;
-        let mut current_row_height = 20u32;
+        let current_row_height = 20u32;
         let size = 1024u32;
 
         let width = 10u32;
-        let height = 15u32;
         let padded_width = width + ATLAS_PADDING;
-        let padded_height = height + ATLAS_PADDING;
 
         if current_row_x + padded_width > size {
             current_row_y += current_row_height;
             current_row_x = 0;
-            current_row_height = 0;
         }
 
         let (x, y) = (current_row_x, current_row_y);
-        current_row_x += padded_width;
-        current_row_height = current_row_height.max(padded_height);
 
         assert_eq!(x, 0, "Should wrap to new row");
         assert_eq!(y, 20, "New row should start at previous row height");

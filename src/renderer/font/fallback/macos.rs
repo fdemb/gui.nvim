@@ -1,22 +1,17 @@
 use objc2_core_foundation::{CFRange, CFRetained, CFString, CGFloat};
 use objc2_core_text::CTFont;
 
-use super::face::Face;
+use super::super::face::Face;
 
 use std::collections::HashMap;
 
 const NERD_FONT_NAME: &str = "Symbols Nerd Font";
 
 pub struct FallbackResolver {
-    cache: HashMap<u32, Option<CachedFallback>>,
-    nerd_font: Option<CFRetained<CTFont>>,
+    cache: HashMap<u32, Option<Face>>,
+    nerd_font: Option<Face>,
     base_font: CFRetained<CTFont>,
     size_px: f32,
-}
-
-#[derive(Clone)]
-struct CachedFallback {
-    font_name: String,
 }
 
 impl FallbackResolver {
@@ -30,34 +25,39 @@ impl FallbackResolver {
         }
     }
 
-    fn load_nerd_font(size_px: f32) -> Option<CFRetained<CTFont>> {
+    fn load_nerd_font(size_px: f32) -> Option<Face> {
         let cf_name = CFString::from_str(NERD_FONT_NAME);
-        let font = unsafe { CTFont::with_name(&cf_name, size_px as CGFloat, std::ptr::null()) };
+        let ct_font = unsafe { CTFont::with_name(&cf_name, size_px as CGFloat, std::ptr::null()) };
 
-        let created_name = unsafe { font.family_name() };
-        if created_name.to_string() == NERD_FONT_NAME {
-            log::debug!("Loaded Nerd Font for fallback resolution");
-            Some(font)
-        } else {
+        let created_name = unsafe { ct_font.family_name() };
+        if created_name.to_string() != NERD_FONT_NAME {
             log::warn!("Could not load '{}' for fallback", NERD_FONT_NAME);
-            None
+            return None;
+        }
+
+        match Face::from_ct_font(ct_font, size_px) {
+            Ok(face) => {
+                log::debug!("Loaded Nerd Font for fallback resolution");
+                Some(face)
+            }
+            Err(err) => {
+                log::warn!(
+                    "Failed to create Face for Nerd Font '{}': {}",
+                    NERD_FONT_NAME,
+                    err
+                );
+                None
+            }
         }
     }
 
     pub fn discover(&mut self, codepoint: u32) -> Option<Face> {
         if let Some(cached) = self.cache.get(&codepoint) {
-            return cached
-                .as_ref()
-                .and_then(|c| self.load_face_by_name(&c.font_name));
+            return cached.clone();
         }
 
         let result = self.discover_uncached(codepoint);
-
-        let cache_entry = result.as_ref().map(|face| CachedFallback {
-            font_name: face.family_name().unwrap_or_default(),
-        });
-        self.cache.insert(codepoint, cache_entry);
-
+        self.cache.insert(codepoint, result.clone());
         result
     }
 
@@ -72,11 +72,9 @@ impl FallbackResolver {
     }
 
     fn try_nerd_font(&self, codepoint: u32) -> Option<Face> {
-        let nerd_font = self.nerd_font.as_ref()?;
-
-        let face = Face::from_ct_font(nerd_font.clone(), self.size_px).ok()?;
+        let face = self.nerd_font.as_ref()?;
         if face.has_codepoint(codepoint) {
-            Some(face)
+            Some(face.clone())
         } else {
             None
         }
@@ -96,13 +94,6 @@ impl FallbackResolver {
         } else {
             None
         }
-    }
-
-    fn load_face_by_name(&self, name: &str) -> Option<Face> {
-        let cf_name = CFString::from_str(name);
-        let ct_font =
-            unsafe { CTFont::with_name(&cf_name, self.size_px as CGFloat, std::ptr::null()) };
-        Face::from_ct_font(ct_font, self.size_px).ok()
     }
 
     fn is_nerd_font_codepoint(codepoint: u32) -> bool {
@@ -195,7 +186,7 @@ mod tests {
 
     #[test]
     fn test_fallback_resolver_nerd_font() {
-        crate::font_loader::register_embedded_fonts();
+        super::super::loader::register_embedded_fonts();
 
         let cf_name = CFString::from_str("Menlo");
         let base_font = unsafe { CTFont::with_name(&cf_name, 14.0, std::ptr::null()) };

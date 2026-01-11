@@ -2,6 +2,7 @@ mod cache;
 mod collection;
 mod face;
 mod fallback;
+pub mod loader;
 mod run;
 mod shaper;
 mod shaping_cache;

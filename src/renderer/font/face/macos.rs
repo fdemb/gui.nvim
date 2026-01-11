@@ -4,74 +4,7 @@ use objc2_core_text::{CTFont, CTFontOrientation, CTFontSymbolicTraits};
 
 use std::ptr::{self, NonNull};
 
-use crate::config::FontSettings;
-
-/// Rasterized glyph with positioning data.
-#[derive(Clone)]
-pub struct RasterizedGlyph {
-    #[allow(dead_code)]
-    pub character: char,
-    pub width: u32,
-    pub height: u32,
-    pub bearing_x: i32,
-    pub bearing_y: i32,
-    pub buffer: GlyphBuffer,
-}
-
-#[derive(Clone)]
-pub enum GlyphBuffer {
-    Rgb(Vec<u8>),
-    Rgba(Vec<u8>),
-}
-
-impl GlyphBuffer {
-    pub fn is_colored(&self) -> bool {
-        matches!(self, GlyphBuffer::Rgba(_))
-    }
-
-    #[allow(dead_code)]
-    pub fn as_bytes(&self) -> &[u8] {
-        match self {
-            GlyphBuffer::Rgb(b) | GlyphBuffer::Rgba(b) => b,
-        }
-    }
-}
-
-/// Font configuration with fallback chain.
-pub struct FontConfig {
-    pub family: String,
-    pub size_pt: f32,
-    pub scale_factor: f32,
-}
-
-impl FontConfig {
-    pub fn new(settings: &FontSettings, scale_factor: f64) -> Self {
-        Self {
-            family: settings.family.clone().unwrap_or_else(default_font_family),
-            size_pt: settings.size.unwrap_or(14.0),
-            scale_factor: scale_factor as f32,
-        }
-    }
-
-    #[allow(dead_code)]
-    pub fn scaled_size(&self) -> f32 {
-        self.size_pt * self.scale_factor
-    }
-}
-
-impl Default for FontConfig {
-    fn default() -> Self {
-        Self {
-            family: default_font_family(),
-            size_pt: 14.0,
-            scale_factor: 1.0,
-        }
-    }
-}
-
-fn default_font_family() -> String {
-    "Menlo".to_string()
-}
+use super::{FaceError, FaceMetrics, GlyphBuffer, RasterizedGlyph};
 
 pub struct HbFontWrapper {
     ptr: *mut harfbuzz_sys::hb_font_t,
@@ -113,48 +46,6 @@ impl Drop for HbFontWrapper {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-#[allow(dead_code)]
-pub struct FaceMetrics {
-    pub cell_width: f32,
-    pub cell_height: f32,
-    pub ascent: f32,
-    pub descent: f32,
-    pub line_gap: f32,
-    pub underline_position: f32,
-    pub underline_thickness: f32,
-    pub strikeout_position: f32,
-    pub strikeout_thickness: f32,
-}
-
-impl Default for FaceMetrics {
-    fn default() -> Self {
-        Self {
-            cell_width: 8.0,
-            cell_height: 16.0,
-            ascent: 12.0,
-            descent: 4.0,
-            line_gap: 0.0,
-            underline_position: 2.0,
-            underline_thickness: 1.0,
-            strikeout_position: 6.0,
-            strikeout_thickness: 1.0,
-        }
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum FaceError {
-    #[error("Failed to create font with name: {0}")]
-    FontNotFound(String),
-    #[error("Failed to create graphics context")]
-    ContextCreationFailed,
-    #[error("Failed to create HarfBuzz face")]
-    HarfBuzzFaceCreation,
-    #[error("Failed to copy font table")]
-    TableCopyFailed,
-}
-
 pub struct Face {
     ct_font: CFRetained<CTFont>,
     hb_font: HbFontWrapper,
@@ -165,7 +56,6 @@ pub struct Face {
 
 impl Clone for Face {
     fn clone(&self) -> Self {
-        // Clone the CTFont and create a new HarfBuzz font from it.
         let ct_font = self.ct_font.clone();
         let hb_font = HbFontWrapper::from_ct_font(&ct_font, self.size_px)
             .expect("Failed to create HarfBuzz font for cloned Face");
@@ -280,6 +170,7 @@ impl Face {
         &self.hb_font
     }
 
+    #[allow(dead_code)]
     pub fn family_name(&self) -> Option<String> {
         let name = unsafe { self.ct_font.family_name() };
         Some(name.to_string())
@@ -327,7 +218,6 @@ impl Face {
             )
         };
 
-        // If the bounding rect is too small, return an empty glyph.
         if rect.size.width < 0.25 || rect.size.height < 0.25 {
             return Ok(RasterizedGlyph {
                 character: '\0',
@@ -339,21 +229,12 @@ impl Face {
             });
         }
 
-        // Calculate integer pixel bearings using floor() consistently.
-        // These represent the whole-pixel offset from the origin to the glyph.
         let bearing_x = rect.origin.x.floor() as i32;
         let bearing_y = (rect.origin.y + rect.size.height).floor() as i32;
 
-        // Calculate the fractional part of the position. We will bake this
-        // sub-pixel offset into the rasterized glyph by translating the
-        // drawing context before rendering. This ensures consistent visual
-        // positioning when glyphs are placed at integer pixel coordinates.
         let frac_x = rect.origin.x - rect.origin.x.floor();
         let frac_y = rect.origin.y - rect.origin.y.floor();
 
-        // Expand the canvas to account for the fractional offset.
-        // The glyph may extend slightly beyond the original bounding box
-        // dimensions when rendered at the sub-pixel offset.
         let width = (rect.size.width + frac_x).ceil() as usize;
         let height = (rect.size.height + frac_y).ceil() as usize;
 
@@ -385,12 +266,6 @@ impl Face {
         })
     }
 
-    /// Render a glyph to a buffer with sub-pixel positioning.
-    ///
-    /// The `frac_x` and `frac_y` parameters specify the fractional pixel offset
-    /// to apply during rasterization. This offset is baked into the rendered bitmap
-    /// so that when the glyph is positioned at integer pixel coordinates, it appears
-    /// at the correct visual position with sub-pixel precision.
     fn render_to_buffer_subpixel(
         &self,
         glyph: CGGlyph,
@@ -440,11 +315,9 @@ impl Face {
         CGContext::set_should_antialias(Some(&context), true);
         CGContext::set_should_smooth_fonts(Some(&context), true);
 
-        // Enable sub-pixel positioning for precise glyph placement.
         CGContext::set_allows_font_subpixel_positioning(Some(&context), true);
         CGContext::set_should_subpixel_position_fonts(Some(&context), true);
 
-        // Disable sub-pixel quantization to maintain precise positioning.
         CGContext::set_allows_font_subpixel_quantization(Some(&context), false);
         CGContext::set_should_subpixel_quantize_fonts(Some(&context), false);
 
@@ -454,15 +327,8 @@ impl Face {
             CGContext::set_gray_fill_color(Some(&context), 1.0, 1.0);
         }
 
-        // Apply the fractional offset via context translation.
-        // This bakes the sub-pixel position into the rasterized glyph,
-        // ensuring consistent visual positioning when placed at integer coordinates.
         CGContext::translate_ctm(Some(&context), frac_x, frac_y);
 
-        // Draw the glyph at the negative of the bounding box origin.
-        // Combined with the fractional translation above, this places the glyph
-        // so that its visual position is correct when the bitmap is displayed
-        // at the integer bearing coordinates.
         let positions = [CGPoint::new(-rect.origin.x, -rect.origin.y)];
         let glyphs = [glyph];
 

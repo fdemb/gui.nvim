@@ -51,8 +51,6 @@ impl CollectionIndex {
 
 struct Entry {
     face: Face,
-    #[allow(dead_code)]
-    is_fallback: bool,
 }
 
 pub struct Collection {
@@ -87,22 +85,10 @@ impl Collection {
         let fallback_resolver = FallbackResolver::new(regular_face.ct_font().clone(), size_px);
 
         Ok(Self {
-            regular: vec![Entry {
-                face: regular_face,
-                is_fallback: false,
-            }],
-            bold: vec![Entry {
-                face: bold_face,
-                is_fallback: false,
-            }],
-            italic: vec![Entry {
-                face: italic_face,
-                is_fallback: false,
-            }],
-            bold_italic: vec![Entry {
-                face: bold_italic_face,
-                is_fallback: false,
-            }],
+            regular: vec![Entry { face: regular_face }],
+            bold: vec![Entry { face: bold_face }],
+            italic: vec![Entry { face: italic_face }],
+            bold_italic: vec![Entry { face: bold_italic_face }],
             metrics,
             size_pt,
             dpi,
@@ -180,10 +166,7 @@ impl Collection {
             if let Some(glyph_id) = fallback_face.glyph_index(codepoint) {
                 let entries = self.entries_for_style_mut(style);
                 let idx = entries.len() as u16;
-                entries.push(Entry {
-                    face: fallback_face,
-                    is_fallback: true,
-                });
+                entries.push(Entry { face: fallback_face });
                 return Some((CollectionIndex::new(style, idx), glyph_id));
             }
         }
@@ -195,10 +178,7 @@ impl Collection {
     pub fn add_fallback(&mut self, style: Style, face: Face) -> CollectionIndex {
         let entries = self.entries_for_style_mut(style);
         let idx = entries.len() as u16;
-        entries.push(Entry {
-            face,
-            is_fallback: true,
-        });
+        entries.push(Entry { face });
         CollectionIndex::new(style, idx)
     }
 

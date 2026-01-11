@@ -2,7 +2,7 @@ mod atlas;
 mod batch;
 mod color;
 mod context;
-mod font;
+pub mod font;
 mod geometry;
 mod grid_renderer;
 mod pipeline;

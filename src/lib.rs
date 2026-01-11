@@ -5,7 +5,7 @@ pub mod constants;
 pub mod editor;
 pub mod env;
 pub mod event;
-pub mod font_loader;
+
 pub mod input;
 pub mod renderer;
 pub mod window;
@@ -22,7 +22,7 @@ pub fn run(args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
 
     let proxy = event_loop.create_proxy();
 
-    font_loader::register_embedded_fonts();
+    renderer::font::loader::register_embedded_fonts();
 
     let config = config::Config::load();
     let mut app = GuiApp::new(proxy, config, args);

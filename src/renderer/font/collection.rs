@@ -88,7 +88,9 @@ impl Collection {
             regular: vec![Entry { face: regular_face }],
             bold: vec![Entry { face: bold_face }],
             italic: vec![Entry { face: italic_face }],
-            bold_italic: vec![Entry { face: bold_italic_face }],
+            bold_italic: vec![Entry {
+                face: bold_italic_face,
+            }],
             metrics,
             size_pt,
             dpi,
@@ -166,7 +168,9 @@ impl Collection {
             if let Some(glyph_id) = fallback_face.glyph_index(codepoint) {
                 let entries = self.entries_for_style_mut(style);
                 let idx = entries.len() as u16;
-                entries.push(Entry { face: fallback_face });
+                entries.push(Entry {
+                    face: fallback_face,
+                });
                 return Some((CollectionIndex::new(style, idx), glyph_id));
             }
         }

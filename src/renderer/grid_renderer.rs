@@ -278,7 +278,17 @@ impl GridRenderer {
                     let y_offset = glyph.y_offset as f32 / 64.0;
 
                     let glyph_x = x + x_offset + cached.bearing_x as f32;
-                    let glyph_y = baseline_y - y_offset - cached.bearing_y as f32;
+
+                    // For fallback fonts (idx > 0), vertically center the glyph within
+                    // the cell. Fallback fonts (Nerd Fonts, system symbols) often have
+                    // different vertical metrics and appear bottom-aligned when using
+                    // the primary font's baseline.
+                    let glyph_y = if glyph.font_index.idx > 0 {
+                        // Center vertically: y + (cell_height - glyph_height) / 2
+                        y + (self.cell_height - cached.height as f32) / 2.0
+                    } else {
+                        baseline_y - y_offset - cached.bearing_y as f32
+                    };
 
                     self.batcher.push_glyph(
                         glyph_x,
@@ -299,7 +309,19 @@ impl GridRenderer {
             // Advance by the shaped x_advance (26.6 fixed-point).
             // Use floating-point division to preserve sub-pixel precision and
             // prevent accumulated drift when rendering long runs of text.
-            x += glyph.x_advance as f32 / 64.0;
+            let advance = glyph.x_advance as f32 / 64.0;
+
+            // Clamp advance for fallback fonts (idx > 0) to prevent layout shift.
+            // Fallback fonts (e.g. Nerd Fonts, system symbol fonts) often have wider
+            // glyphs than the primary monospace font. Without clamping, these wider
+            // advances cause subsequent characters to shift right, breaking alignment.
+            let advance = if glyph.font_index.idx > 0 {
+                advance.min(self.cell_width)
+            } else {
+                advance
+            };
+
+            x += advance;
         }
     }
 

@@ -20,6 +20,20 @@ A Neovim GUI focusing on simplicity and performance.
 
 ## Installation
 
+### From Github releases
+
+Download the latest nightly release from the [releases page](https://github.com/fdemb/gui.nvim/releases).
+After downloading, unzip the file and move the app to your Applications folder.
+
+Note: you may need to remove the quarantine attribute from the downloaded file:
+
+```sh
+xattr -d com.apple.quarantine /Applications/gui-nvim.app
+```
+
+This is required because macOS blocks unsigned applications from running.
+I don't have an Apple Developer account, so I can't sign the app for now.
+
 ### From source
 
 ```sh
@@ -39,6 +53,12 @@ cp -r target/release/bundle/osx/gui.nvim.app /Applications/
 
 ## Usage
 
+Just run it from the macOS Finder or Spotlight.
+
+You can also use it via the command line, but it's not intalled automatically to PATH yet.
+
+Examples:
+
 ```sh
 # Launch gui.nvim
 gui-nvim
@@ -47,7 +67,7 @@ gui-nvim
 gui-nvim file.txt
 
 # Pass arguments to Neovim
-gui-nvim -c "colorscheme desert" file.txt
+gui-nvim --clean file.txt
 ```
 
 ### macOS environment setup

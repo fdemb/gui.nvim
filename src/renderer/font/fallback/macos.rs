@@ -186,7 +186,7 @@ mod tests {
 
     #[test]
     fn test_fallback_resolver_nerd_font() {
-        super::super::loader::register_embedded_fonts();
+        super::super::super::loader::register_embedded_fonts();
 
         let cf_name = CFString::from_str("Menlo");
         let base_font = unsafe { CTFont::with_name(&cf_name, 14.0, std::ptr::null()) };

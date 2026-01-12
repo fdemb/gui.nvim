@@ -28,7 +28,7 @@ After downloading, unzip the file and move the app to your Applications folder.
 Note: you may need to remove the quarantine attribute from the downloaded file:
 
 ```sh
-xattr -d com.apple.quarantine /Applications/gui-nvim.app
+xattr -d com.apple.quarantine /Applications/gui.nvim.app
 ```
 
 This is required because macOS blocks unsigned applications from running.

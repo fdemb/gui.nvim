@@ -28,7 +28,8 @@ mod tests {
     }
 
     #[test]
-    fn test_register_embedded_fonts_no_panic() {
-        register_embedded_fonts();
+    fn test_create_embedded_nerd_font() {
+        let font = create_embedded_nerd_font(14.0);
+        assert!(font.is_some(), "Should create embedded nerd font");
     }
 }

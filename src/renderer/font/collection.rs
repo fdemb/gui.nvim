@@ -305,4 +305,52 @@ mod tests {
             let _ = index;
         }
     }
+
+    #[test]
+    fn test_collection_nerd_font_fallback() {
+        let mut collection = Collection::new("Menlo", 14.0, 72.0).unwrap();
+
+        // Try to resolve a nerd font icon
+        let nerd_codepoint = 0xE62B_u32; // Seti-UI icon
+        let result = collection.resolve_glyph(nerd_codepoint, Style::Regular);
+
+        assert!(
+            result.is_some(),
+            "Should find fallback for nerd font icon 0x{:X}",
+            nerd_codepoint
+        );
+
+        let (index, glyph_id) = result.unwrap();
+        println!("Nerd font glyph: index={:?}, glyph_id={}", index, glyph_id);
+
+        // Should be from a fallback font (idx > 0), not the primary
+        assert!(index.idx > 0, "Nerd font should be from fallback (idx > 0)");
+        assert!(glyph_id > 0, "Glyph ID should be non-zero");
+
+        // Now verify we can get the face and render the glyph
+        let face = collection
+            .get_face(index)
+            .expect("Should get fallback face");
+        let rendered = face.render_glyph(glyph_id);
+
+        assert!(
+            rendered.is_ok(),
+            "Should render nerd font glyph: {:?}",
+            rendered.err()
+        );
+
+        let glyph = rendered.unwrap();
+        println!(
+            "Rendered: {}x{}, bearing=({}, {})",
+            glyph.width, glyph.height, glyph.bearing_x, glyph.bearing_y
+        );
+
+        // The glyph should have non-zero dimensions
+        assert!(
+            glyph.width > 0 && glyph.height > 0,
+            "Rendered glyph should have non-zero dimensions: {}x{}",
+            glyph.width,
+            glyph.height
+        );
+    }
 }

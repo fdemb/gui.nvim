@@ -1,47 +1,54 @@
-use objc2_core_foundation::{CFData, CFError, CFRetained};
-use objc2_core_graphics::{CGDataProvider, CGFont};
-#[allow(deprecated)]
-use objc2_core_text::CTFontManagerRegisterGraphicsFont;
-use std::ptr::{self, NonNull};
-use std::sync::Once;
+use objc2_core_foundation::{CFData, CFRetained, CGFloat};
+use objc2_core_text::{CTFont, CTFontDescriptor, CTFontManagerCreateFontDescriptorFromData};
 
 use super::EMBEDDED_NERD_FONT;
 
-static REGISTER_FONTS: Once = Once::new();
+/// Creates a CTFont directly from embedded font data without global registration.
+///
+/// This is the modern approach (using `CTFontManagerCreateFontDescriptorFromData`)
+/// rather than the deprecated `CTFontManagerRegisterGraphicsFont` which pollutes
+/// the global font namespace.
+pub fn create_embedded_nerd_font(size_px: f32) -> Option<CFRetained<CTFont>> {
+    let cf_data = CFData::from_static_bytes(EMBEDDED_NERD_FONT);
 
-pub fn register_embedded_fonts() {
-    REGISTER_FONTS.call_once(|| {
-        log::info!("Registering embedded fonts...");
+    // Create font descriptor directly from data (modern, non-deprecated API)
+    let descriptor: CFRetained<CTFontDescriptor> =
+        unsafe { CTFontManagerCreateFontDescriptorFromData(&cf_data) }?;
 
-        let cf_data = CFData::from_static_bytes(EMBEDDED_NERD_FONT);
+    // Create font from descriptor
+    let ct_font =
+        unsafe { CTFont::with_font_descriptor(&descriptor, size_px as CGFloat, std::ptr::null()) };
 
-        let Some(provider) = CGDataProvider::with_cf_data(Some(&cf_data)) else {
-            log::error!("Failed to create CGDataProvider from embedded data");
-            return;
-        };
+    Some(ct_font)
+}
 
-        let Some(font) = CGFont::with_data_provider(&provider) else {
-            log::error!("Failed to create CGFont from embedded data");
-            return;
-        };
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-        #[allow(deprecated)]
-        let success = unsafe {
-            let mut error: *mut CFError = ptr::null_mut();
-            let result = CTFontManagerRegisterGraphicsFont(&font, &mut error);
-            if !result && !error.is_null() {
-                let error_retained: CFRetained<CFError> =
-                    CFRetained::from_raw(NonNull::new_unchecked(error));
-                log::error!(
-                    "Failed to register embedded font 'Symbols Nerd Font': {}",
-                    error_retained
-                );
-            }
-            result
-        };
+    #[test]
+    fn test_create_embedded_nerd_font() {
+        let font = create_embedded_nerd_font(14.0);
+        assert!(font.is_some(), "Should create embedded nerd font");
 
-        if success {
-            log::info!("Successfully registered embedded font: Symbols Nerd Font");
+        let font = font.unwrap();
+        let name = unsafe { font.family_name() };
+        assert_eq!(
+            name.to_string(),
+            "Symbols Nerd Font",
+            "Font family name should match"
+        );
+    }
+
+    #[test]
+    fn test_create_embedded_nerd_font_different_sizes() {
+        for size in [10.0, 12.0, 14.0, 16.0, 24.0, 48.0] {
+            let font = create_embedded_nerd_font(size);
+            assert!(
+                font.is_some(),
+                "Should create embedded nerd font at size {}",
+                size
+            );
         }
-    });
+    }
 }

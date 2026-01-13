@@ -1,16 +1,14 @@
-//! Linux font loader implementation using fontconfig.
+//! Linux font loader implementation.
 //!
-//! TODO: Implement using:
-//! - `fontconfig` crate to register the embedded Nerd Font
-//! - Or write the font to a temp file and add to fontconfig search path
+//! TODO: Implement using FreeType to load fonts from memory directly.
+//! The embedded Nerd Font data is available via `super::EMBEDDED_NERD_FONT`.
 
-use std::sync::Once;
-
-static REGISTER_FONTS: Once = Once::new();
-
-pub fn register_embedded_fonts() {
-    REGISTER_FONTS.call_once(|| {
-        log::info!("Registering embedded fonts (Linux - not yet implemented)...");
-        // TODO: Register embedded Nerd Font with fontconfig
-    });
+/// Creates a font directly from embedded data.
+///
+/// TODO: Implement using FreeType. Returns the platform's font type.
+/// For now returns `()` as a placeholder since we don't have the Linux
+/// font infrastructure yet.
+pub fn create_embedded_nerd_font(_size_px: f32) -> Option<()> {
+    log::warn!("create_embedded_nerd_font not yet implemented for Linux");
+    None
 }

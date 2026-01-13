@@ -22,8 +22,6 @@ pub fn run(args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
 
     let proxy = event_loop.create_proxy();
 
-    renderer::font::loader::register_embedded_fonts();
-
     let config = config::Config::load();
     let mut app = GuiApp::new(proxy, config, args);
 

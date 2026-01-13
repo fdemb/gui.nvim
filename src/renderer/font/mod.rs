@@ -1,5 +1,6 @@
 mod cache;
 mod collection;
+mod embedded;
 mod face;
 mod fallback;
 pub mod loader;

@@ -1,2 +1,1 @@
-pub const EMBEDDED_NERD_FONT: &[u8] =
-    include_bytes!("../../../../assets/fonts/SymbolsNerdFont-Regular.ttf");
+pub use super::embedded::NERD_FONT_DATA as EMBEDDED_NERD_FONT;

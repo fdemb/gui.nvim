@@ -1,5 +1,6 @@
 use super::fallback::FallbackResolver;
-use super::platform::Face;
+use super::platform::{create_fallback_resolver_with_embedded, CoreTextSystemFallback, Face};
+use super::traits::SystemFallback;
 use super::types::{FaceError, FaceMetrics};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -61,14 +62,13 @@ pub struct Collection {
     size_pt: f32,
     #[allow(dead_code)]
     dpi: f32,
-    fallback_resolver: FallbackResolver,
+    fallback_resolver: FallbackResolver<Face, CoreTextSystemFallback>,
 }
 
 impl Collection {
     pub fn new(family: &str, size_pt: f32, dpi: f32) -> Result<Self, FaceError> {
         let regular_face = Face::new(family, size_pt, dpi)?;
         let metrics = *regular_face.metrics();
-        let size_px = regular_face.size_px();
 
         let bold_face = regular_face
             .create_style_variant(Style::Bold)
@@ -80,7 +80,12 @@ impl Collection {
             .create_style_variant(Style::BoldItalic)
             .unwrap_or_else(|| regular_face.clone());
 
-        let fallback_resolver = FallbackResolver::new(regular_face.ct_font().clone(), size_px);
+        let fallback_resolver = create_fallback_resolver_with_embedded(&regular_face)
+            .unwrap_or_else(|| {
+                let size_px = regular_face.size_px();
+                let system_fallback = CoreTextSystemFallback::new(&regular_face, size_px);
+                FallbackResolver::new(system_fallback)
+            });
 
         Ok(Self {
             regular: vec![Entry { face: regular_face }],

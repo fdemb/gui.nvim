@@ -1,9 +1,6 @@
-use objc2_core_foundation::{CFData, CFRange, CFRetained, CFString, CGFloat, CGPoint, CGRect};
+use objc2_core_foundation::{CFRange, CFRetained, CFString, CGFloat, CGPoint, CGRect};
 use objc2_core_graphics::{CGBitmapInfo, CGColorSpace, CGGlyph};
-use objc2_core_text::{
-    CTFont, CTFontDescriptor, CTFontManagerCreateFontDescriptorFromData, CTFontOrientation,
-    CTFontSymbolicTraits,
-};
+use objc2_core_text::{CTFont, CTFontOrientation, CTFontSymbolicTraits};
 
 use std::ptr::{self, NonNull};
 
@@ -388,6 +385,28 @@ impl Face {
         let range = CFRange::new(0, text.chars().count() as isize);
 
         unsafe { self.ct_font.for_string(&cf_string, range) }
+    }
+}
+
+impl FontFace for Face {
+    fn metrics(&self) -> &FaceMetrics {
+        &self.metrics
+    }
+
+    fn size_px(&self) -> f32 {
+        self.size_px
+    }
+
+    fn has_codepoint(&self, codepoint: u32) -> bool {
+        self.has_codepoint(codepoint)
+    }
+
+    fn glyph_index(&self, codepoint: u32) -> Option<u32> {
+        self.glyph_index(codepoint)
+    }
+
+    fn render_glyph(&self, glyph_id: u32) -> Result<RasterizedGlyph, FaceError> {
+        self.render_glyph(glyph_id)
     }
 }
 

@@ -3,8 +3,9 @@
 use objc2_core_foundation::{CFRange, CFRetained, CFString};
 use objc2_core_text::CTFont;
 
-use super::super::face::Face;
-use super::super::loader::create_embedded_nerd_font;
+use super::super::super::loader::EMBEDDED_NERD_FONT;
+use super::loader::create_font_from_bytes;
+use super::Face;
 
 use std::collections::HashMap;
 
@@ -32,7 +33,7 @@ impl FallbackResolver {
     }
 
     fn load_nerd_font(size_px: f32) -> Option<Face> {
-        let ct_font = create_embedded_nerd_font(size_px)?;
+        let ct_font = create_font_from_bytes(EMBEDDED_NERD_FONT, size_px)?;
         match Face::from_ct_font(ct_font, size_px) {
             Ok(face) => {
                 log::info!("Loaded embedded Nerd Font: size={}px", size_px);

@@ -1,8 +1,6 @@
-use objc2_core_foundation::CGFloat;
-use objc2_core_text::CTFontSymbolicTraits;
-
-use super::face::{Face, FaceError, FaceMetrics};
 use super::fallback::FallbackResolver;
+use super::platform::Face;
+use super::types::{FaceError, FaceMetrics};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Style {
@@ -72,14 +70,14 @@ impl Collection {
         let metrics = *regular_face.metrics();
         let size_px = regular_face.size_px();
 
-        // Use CoreText symbolic traits to get proper bold/italic variants.
-        // This is more reliable than name-based lookup (e.g. "Iosevka-Bold")
-        // which can fail silently and return a wrong fallback font.
-        let bold_face = Self::create_variant(&regular_face, size_px, Style::Bold)
+        let bold_face = regular_face
+            .create_style_variant(Style::Bold)
             .unwrap_or_else(|| regular_face.clone());
-        let italic_face = Self::create_variant(&regular_face, size_px, Style::Italic)
+        let italic_face = regular_face
+            .create_style_variant(Style::Italic)
             .unwrap_or_else(|| regular_face.clone());
-        let bold_italic_face = Self::create_variant(&regular_face, size_px, Style::BoldItalic)
+        let bold_italic_face = regular_face
+            .create_style_variant(Style::BoldItalic)
             .unwrap_or_else(|| regular_face.clone());
 
         let fallback_resolver = FallbackResolver::new(regular_face.ct_font().clone(), size_px);
@@ -96,30 +94,6 @@ impl Collection {
             dpi,
             fallback_resolver,
         })
-    }
-
-    /// Create a font variant with the specified style using CoreText symbolic traits.
-    fn create_variant(base_face: &Face, size_px: f32, style: Style) -> Option<Face> {
-        let traits = match style {
-            Style::Regular => return Some(base_face.clone()),
-            Style::Bold => CTFontSymbolicTraits::TraitBold,
-            Style::Italic => CTFontSymbolicTraits::TraitItalic,
-            Style::BoldItalic => {
-                CTFontSymbolicTraits::TraitBold | CTFontSymbolicTraits::TraitItalic
-            }
-        };
-
-        let ct_font = base_face.ct_font();
-        let variant_ct_font = unsafe {
-            ct_font.copy_with_symbolic_traits(
-                size_px as CGFloat,
-                std::ptr::null(), // preserve original matrix
-                traits,
-                traits, // mask: only modify the traits we're setting
-            )
-        }?;
-
-        Face::from_ct_font(variant_ct_font, size_px).ok()
     }
 
     pub fn metrics(&self) -> &FaceMetrics {

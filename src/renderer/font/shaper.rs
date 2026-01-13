@@ -1,5 +1,5 @@
 use super::collection::{Collection, CollectionIndex, Style};
-use super::face::Face;
+use super::platform::Face;
 
 #[derive(Debug, Clone, Copy)]
 pub struct ShapedGlyph {

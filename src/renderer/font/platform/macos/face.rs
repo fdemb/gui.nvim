@@ -1,14 +1,15 @@
-use objc2_core_foundation::{CFRange, CFRetained, CFString, CGFloat, CGPoint, CGRect};
+use objc2_core_foundation::{CFData, CFRange, CFRetained, CFString, CGFloat, CGPoint, CGRect};
 use objc2_core_graphics::{CGBitmapInfo, CGColorSpace, CGGlyph};
-use objc2_core_text::{CTFont, CTFontOrientation, CTFontSymbolicTraits};
+use objc2_core_text::{
+    CTFont, CTFontDescriptor, CTFontManagerCreateFontDescriptorFromData, CTFontOrientation,
+    CTFontSymbolicTraits,
+};
 
 use std::ptr::{self, NonNull};
 
-use super::{FaceError, FaceMetrics, GlyphBuffer, RasterizedGlyph};
-
-pub struct HbFontWrapper {
-    ptr: *mut harfbuzz_sys::hb_font_t,
-}
+use crate::renderer::font::{
+    FaceError, FaceMetrics, FontFace, GlyphBuffer, HbFontWrapper, RasterizedGlyph,
+};
 
 mod hb_coretext_ffi {
     use std::ffi::c_void;
@@ -18,32 +19,17 @@ mod hb_coretext_ffi {
     }
 }
 
-impl HbFontWrapper {
-    pub fn from_ct_font(ct_font: &CTFont, size_px: f32) -> Option<Self> {
-        let ct_font_ptr = ct_font as *const CTFont as *const std::ffi::c_void;
-        let hb_font = unsafe { hb_coretext_ffi::hb_coretext_font_create(ct_font_ptr) };
-        if hb_font.is_null() {
-            return None;
-        }
-        let scale = (size_px * 64.0) as i32;
-        unsafe {
-            harfbuzz_sys::hb_font_set_scale(hb_font, scale, scale);
-        }
-        Some(Self { ptr: hb_font })
+fn hb_font_from_ct_font(ct_font: &CTFont, size_px: f32) -> Option<HbFontWrapper> {
+    let ct_font_ptr = ct_font as *const CTFont as *const std::ffi::c_void;
+    let hb_font = unsafe { hb_coretext_ffi::hb_coretext_font_create(ct_font_ptr) };
+    if hb_font.is_null() {
+        return None;
     }
-
-    #[allow(dead_code)]
-    pub fn as_ptr(&self) -> *mut harfbuzz_sys::hb_font_t {
-        self.ptr
+    let scale = (size_px * 64.0) as i32;
+    unsafe {
+        harfbuzz_sys::hb_font_set_scale(hb_font, scale, scale);
     }
-}
-
-impl Drop for HbFontWrapper {
-    fn drop(&mut self) {
-        unsafe {
-            harfbuzz_sys::hb_font_destroy(self.ptr);
-        }
-    }
+    unsafe { HbFontWrapper::from_raw(hb_font) }
 }
 
 pub struct Face {
@@ -57,7 +43,7 @@ pub struct Face {
 impl Clone for Face {
     fn clone(&self) -> Self {
         let ct_font = self.ct_font.clone();
-        let hb_font = HbFontWrapper::from_ct_font(&ct_font, self.size_px)
+        let hb_font = hb_font_from_ct_font(&ct_font, self.size_px)
             .expect("Failed to create HarfBuzz font for cloned Face");
         Self {
             ct_font,
@@ -79,9 +65,51 @@ impl Face {
         Self::from_ct_font(ct_font, size_px)
     }
 
+    pub fn from_bytes(data: &'static [u8], size_px: f32) -> Result<Self, FaceError> {
+        use objc2_core_foundation::CFData;
+        use objc2_core_text::CTFontDescriptor;
+        use objc2_core_text::CTFontManagerCreateFontDescriptorFromData;
+
+        let cf_data = CFData::from_static_bytes(data);
+
+        let descriptor: CFRetained<CTFontDescriptor> =
+            unsafe { CTFontManagerCreateFontDescriptorFromData(&cf_data) }
+                .ok_or(FaceError::TableCopyFailed)?;
+
+        let ct_font =
+            unsafe { CTFont::with_font_descriptor(&descriptor, size_px as CGFloat, ptr::null()) };
+
+        Self::from_ct_font(ct_font, size_px)
+    }
+
+    pub fn create_style_variant(
+        &self,
+        style: crate::renderer::font::collection::Style,
+    ) -> Option<Self> {
+        let traits = match style {
+            crate::renderer::font::collection::Style::Regular => return Some(self.clone()),
+            crate::renderer::font::collection::Style::Bold => CTFontSymbolicTraits::TraitBold,
+            crate::renderer::font::collection::Style::Italic => CTFontSymbolicTraits::TraitItalic,
+            crate::renderer::font::collection::Style::BoldItalic => {
+                CTFontSymbolicTraits::TraitBold | CTFontSymbolicTraits::TraitItalic
+            }
+        };
+
+        let variant_ct_font = unsafe {
+            self.ct_font.copy_with_symbolic_traits(
+                self.size_px as CGFloat,
+                std::ptr::null(),
+                traits,
+                traits,
+            )
+        }?;
+
+        Self::from_ct_font(variant_ct_font, self.size_px).ok()
+    }
+
     pub fn from_ct_font(ct_font: CFRetained<CTFont>, size_px: f32) -> Result<Self, FaceError> {
-        let hb_font = HbFontWrapper::from_ct_font(&ct_font, size_px)
-            .ok_or(FaceError::HarfBuzzFaceCreation)?;
+        let hb_font =
+            hb_font_from_ct_font(&ct_font, size_px).ok_or(FaceError::HarfBuzzFaceCreation)?;
         let metrics = Self::compute_metrics(&ct_font, size_px);
 
         let traits = unsafe { ct_font.symbolic_traits() };

@@ -5,6 +5,11 @@ pub struct HbFontWrapper {
 }
 
 impl HbFontWrapper {
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must be a valid pointer to a `hb_font_t` object or null.
+    /// If non-null, ownership of the font is transferred to the wrapper.
     pub unsafe fn from_raw(ptr: *mut harfbuzz_sys::hb_font_t) -> Option<Self> {
         if ptr.is_null() {
             return None;

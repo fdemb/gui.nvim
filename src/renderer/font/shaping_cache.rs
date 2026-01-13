@@ -76,8 +76,8 @@ impl ShapingCache {
 
     /// Insert a shaped run into the cache.
     pub fn insert(&mut self, key: ShapingCacheKey, glyphs: Vec<ShapedGlyph>) {
-        if self.entries.contains_key(&key) {
-            self.entries.insert(key, CachedShapedRun { glyphs });
+        if let std::collections::hash_map::Entry::Occupied(mut e) = self.entries.entry(key) {
+            e.insert(CachedShapedRun { glyphs });
             return;
         }
         self.insert_inner(key, glyphs);

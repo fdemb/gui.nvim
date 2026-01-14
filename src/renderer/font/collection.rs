@@ -1,5 +1,5 @@
 use super::fallback::FallbackResolver;
-use super::platform::{create_fallback_resolver_with_embedded, CoreTextSystemFallback, Face};
+use super::platform::{create_fallback_resolver_with_embedded, Face, PlatformSystemFallback};
 use super::traits::SystemFallback;
 use super::types::{FaceError, FaceMetrics};
 
@@ -62,7 +62,7 @@ pub struct Collection {
     size_pt: f32,
     #[allow(dead_code)]
     dpi: f32,
-    fallback_resolver: FallbackResolver<Face, CoreTextSystemFallback>,
+    fallback_resolver: FallbackResolver<Face, PlatformSystemFallback>,
 }
 
 impl Collection {
@@ -83,7 +83,7 @@ impl Collection {
         let fallback_resolver = create_fallback_resolver_with_embedded(&regular_face)
             .unwrap_or_else(|| {
                 let size_px = regular_face.size_px();
-                let system_fallback = CoreTextSystemFallback::new(&regular_face, size_px);
+                let system_fallback = PlatformSystemFallback::new(&regular_face, size_px);
                 FallbackResolver::new(system_fallback)
             });
 

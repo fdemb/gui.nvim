@@ -338,6 +338,8 @@ impl Face {
         use objc2_core_graphics::CGContext;
         CGContext::set_allows_antialiasing(Some(&context), true);
         CGContext::set_should_antialias(Some(&context), true);
+
+        CGContext::set_allows_font_smoothing(Some(&context), true);
         CGContext::set_should_smooth_fonts(Some(&context), true);
 
         CGContext::set_allows_font_subpixel_positioning(Some(&context), true);

@@ -27,6 +27,16 @@ pub fn create_fallback_resolver(_base_face: &Face) -> FallbackResolver<Face, Lin
     FallbackResolver::new(system_fallback)
 }
 
+/// Creates a FallbackResolver with embedded nerd font support.
+///
+/// TODO: Load embedded nerd font when Linux font loading is implemented.
+pub fn create_fallback_resolver_with_embedded(
+    _base_face: &Face,
+) -> Option<FallbackResolver<Face, LinuxSystemFallback>> {
+    // Return None until Linux font loading is implemented
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

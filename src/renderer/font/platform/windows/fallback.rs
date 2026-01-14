@@ -29,6 +29,16 @@ pub fn create_fallback_resolver(
     FallbackResolver::new(system_fallback)
 }
 
+/// Creates a FallbackResolver with embedded nerd font support.
+///
+/// TODO: Load embedded nerd font when Windows font loading is implemented.
+pub fn create_fallback_resolver_with_embedded(
+    _base_face: &Face,
+) -> Option<FallbackResolver<Face, WindowsSystemFallback>> {
+    // Return None until Windows font loading is implemented
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

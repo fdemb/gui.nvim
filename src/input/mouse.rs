@@ -142,18 +142,10 @@ pub fn scroll_delta_to_direction(delta: MouseScrollDelta) -> Option<(ScrollDirec
     }
 }
 
+#[derive(Default)]
 pub struct MouseState {
     pub last_position: Option<GridPosition>,
     pub pressed_button: Option<MouseButtonType>,
-}
-
-impl Default for MouseState {
-    fn default() -> Self {
-        Self {
-            last_position: None,
-            pressed_button: None,
-        }
-    }
 }
 
 impl MouseState {

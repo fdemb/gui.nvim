@@ -1,8 +1,8 @@
-/// Color conversion utilities for GPU rendering.
-///
-/// Colors from Neovim are in sRGB space, but GPU framebuffers with sRGB format
-/// expect linear colors as input (they auto-convert linear→sRGB on output).
-/// These utilities handle the necessary conversions.
+//! Color conversion utilities for GPU rendering.
+//!
+//! Colors from Neovim are in sRGB space, but GPU framebuffers with sRGB format
+//! expect linear colors as input (they auto-convert linear→sRGB on output).
+//! These utilities handle the necessary conversions.
 
 /// Default background color (approx #1E1E1E)
 pub const DEFAULT_BG_COLOR: u32 = 0x1E1E1E;

@@ -87,7 +87,7 @@ const EXCLUDED_SUFFIXES: &[&str] = &[
 /// Returns the path to the environment file.
 /// Location: `~/.config/gui-nvim/env`
 pub fn env_file_path() -> Option<PathBuf> {
-    return config_dir().map(|p| p.join("env"));
+    config_dir().map(|p| p.join("env"))
 }
 
 /// Captures current environment variables to the config file.

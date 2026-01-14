@@ -79,22 +79,21 @@ impl InputHandler {
         let old_pos = self.mouse_state.last_position;
         self.mouse_state.update_position(grid_pos);
 
-        if self.mouse_state.is_dragging() {
-            if old_pos
+        if self.mouse_state.is_dragging()
+            && old_pos
                 .map(|p| p.row != grid_pos.row || p.col != grid_pos.col)
                 .unwrap_or(true)
-            {
-                if let Some(button_type) = self.mouse_state.pressed_button {
-                    let modifier_str = modifiers_to_string(&self.modifiers);
-                    bridge.mouse_input(
-                        button_type.as_str(),
-                        MouseAction::Drag.as_str(),
-                        &modifier_str,
-                        0,
-                        grid_pos.row,
-                        grid_pos.col,
-                    );
-                }
+        {
+            if let Some(button_type) = self.mouse_state.pressed_button {
+                let modifier_str = modifiers_to_string(&self.modifiers);
+                bridge.mouse_input(
+                    button_type.as_str(),
+                    MouseAction::Drag.as_str(),
+                    &modifier_str,
+                    0,
+                    grid_pos.row,
+                    grid_pos.col,
+                );
             }
         }
     }

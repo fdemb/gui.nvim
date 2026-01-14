@@ -1,3 +1,6 @@
+#![allow(clippy::large_enum_variant)]
+#![allow(clippy::result_unit_err)]
+
 use std::sync::Arc;
 use std::task::{Context, Poll, Wake, Waker};
 use winit::window::Window;
@@ -24,11 +27,17 @@ pub struct RenderLoop {
     state: RenderState,
 }
 
-impl RenderLoop {
-    pub fn new() -> Self {
+impl Default for RenderLoop {
+    fn default() -> Self {
         Self {
             state: RenderState::Uninitialized,
         }
+    }
+}
+
+impl RenderLoop {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn initialize(&mut self, window: Arc<Window>, config: Config) {

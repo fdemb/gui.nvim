@@ -8,17 +8,23 @@ pub struct WindowSettings {
     pub cell_metrics: CellMetrics,
 }
 
-impl WindowSettings {
-    pub fn new() -> Self {
-        let mut cell_metrics = CellMetrics::default();
-        cell_metrics.padding_x = PADDING as f64;
-        cell_metrics.padding_y = PADDING_TOP as f64;
-
+impl Default for WindowSettings {
+    fn default() -> Self {
         Self {
             cols: DEFAULT_COLS,
             rows: DEFAULT_ROWS,
-            cell_metrics,
+            cell_metrics: CellMetrics {
+                padding_x: PADDING as f64,
+                padding_y: PADDING_TOP as f64,
+                ..Default::default()
+            },
         }
+    }
+}
+
+impl WindowSettings {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn update_padding(&mut self, scale_factor: f64) {

@@ -192,12 +192,12 @@ impl GuiApp {
 
     fn do_render(&mut self) {
         if let Some(window) = &self.window {
-            if let Err(_) = self.render_loop.render(
+            if self.render_loop.render(
                 &self.editor_state,
                 self.settings.cell_metrics.padding_x as f32,
                 self.settings.cell_metrics.padding_y as f32,
                 window,
-            ) {
+            ).is_err() {
                 if self.render_loop.renderer().is_none() {
                     // Failed or not ready, nothing to do
                 } else {
@@ -341,12 +341,11 @@ impl ApplicationHandler<UserEvent> for GuiApp {
                     window.request_redraw();
                 }
             }
-            UserEvent::GUI(event) => match event {
-                GUIEvent::ScaleFactorChanged(scale_factor) => {
+            UserEvent::GUI(event) => {
+                if let GUIEvent::ScaleFactorChanged(scale_factor) = event {
                     self.update_layout(scale_factor);
                 }
-                _ => {}
-            },
+            }
         }
     }
 

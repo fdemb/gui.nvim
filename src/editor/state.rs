@@ -226,13 +226,13 @@ impl EditorState {
             self.cursor.last_blink_time = now;
             self.cursor.blink_reset_pending = false;
             self.cursor.blink_visible = true;
-            return old_visible != true;
+            return !old_visible;
         }
 
         let mode = self.current_mode();
         if mode.blink_on == 0 || mode.blink_off == 0 {
             self.cursor.blink_visible = true;
-            return old_visible != true;
+            return !old_visible;
         }
 
         let elapsed = now.saturating_sub(self.cursor.last_blink_time);
@@ -240,7 +240,7 @@ impl EditorState {
 
         if elapsed < wait {
             self.cursor.blink_visible = true;
-            return old_visible != true;
+            return !old_visible;
         }
 
         let blink_elapsed = elapsed - wait;
@@ -248,7 +248,7 @@ impl EditorState {
 
         if cycle == 0 {
             self.cursor.blink_visible = true;
-            return old_visible != true;
+            return !old_visible;
         }
 
         let phase = blink_elapsed % cycle;

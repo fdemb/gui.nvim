@@ -1,6 +1,5 @@
 use std::env;
 use std::io;
-use std::path::PathBuf;
 use std::process::Stdio;
 
 use nvim_rs::compat::tokio::Compat;
@@ -33,7 +32,7 @@ impl NeovimProcess {
         let handler = NeovimHandler::new(event_proxy);
 
         let current_dir = env::current_dir()?;
-        if current_dir == PathBuf::from("/") {
+        if current_dir.as_os_str() == "/" {
             log::warn!("Current directory is /. This is probably not what you want. Changing to home directory.");
             env::set_current_dir(env::home_dir().expect("Could not find home directory"))?;
         }
@@ -47,7 +46,7 @@ impl NeovimProcess {
 
         let (neovim, io_handle, child) = new_child_cmd(&mut cmd, handler)
             .await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            .map_err(io::Error::other)?;
 
         log::info!("Neovim process spawned: {:?}", nvim_path);
 

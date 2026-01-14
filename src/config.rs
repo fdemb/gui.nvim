@@ -2,7 +2,7 @@ use serde::Deserialize;
 use std::fs;
 use std::path::PathBuf;
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Default)]
 pub struct Config {
     #[serde(default)]
     pub font: FontSettings,
@@ -18,6 +18,7 @@ pub enum VsyncMode {
     MailboxIfAvailable,
 }
 
+#[allow(clippy::derivable_impls)]
 impl Default for VsyncMode {
     fn default() -> Self {
         // macOS doesn't support mailbox and has bugs (or even kernel panics)
@@ -33,43 +34,19 @@ impl Default for VsyncMode {
     }
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Default)]
 pub struct PerformanceSettings {
     #[serde(default)]
     pub vsync: VsyncMode,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Default)]
 pub struct FontSettings {
     pub family: Option<String>,
     pub size: Option<f32>,
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            font: FontSettings::default(),
-            performance: PerformanceSettings::default(),
-        }
-    }
-}
 
-impl Default for PerformanceSettings {
-    fn default() -> Self {
-        Self {
-            vsync: VsyncMode::default(),
-        }
-    }
-}
-
-impl Default for FontSettings {
-    fn default() -> Self {
-        Self {
-            family: None,
-            size: None,
-        }
-    }
-}
 
 impl FontSettings {
     pub fn from_guifont(guifont: &str) -> Option<Self> {
@@ -130,17 +107,15 @@ impl Config {
 /// Returns the gui-nvim config directory.
 /// Location: `~/.config/gui-nvim/`
 pub fn config_dir() -> Option<PathBuf> {
-    if let Some(config_dir) = std::env::var_os("XDG_CONFIG_HOME") {
-        Some(PathBuf::from(config_dir).join("gui-nvim"))
-    } else if let Some(home) = std::env::var_os("HOME") {
-        Some(PathBuf::from(home).join(".config").join("gui-nvim"))
-    } else {
-        None
-    }
+    std::env::var_os("XDG_CONFIG_HOME")
+        .map(|d| PathBuf::from(d).join("gui-nvim"))
+        .or_else(|| {
+            std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config").join("gui-nvim"))
+        })
 }
 
 fn config_file_path() -> Option<PathBuf> {
-    return config_dir().map(|p| p.join("config.toml"));
+    config_dir().map(|p| p.join("config.toml"))
 }
 
 #[cfg(test)]

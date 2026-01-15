@@ -16,16 +16,20 @@ pub enum VsyncMode {
     Enabled,
     Disabled,
     MailboxIfAvailable,
+    /// macOS-only: Use CADisplayLink for frame synchronization.
+    /// This provides proper vblank sync without relying on wgpu's broken
+    /// PresentMode::Fifo on macOS. Ignored on other platforms.
+    DisplayLink,
 }
 
 #[allow(clippy::derivable_impls)]
 impl Default for VsyncMode {
     fn default() -> Self {
-        // macOS doesn't support mailbox and has bugs (or even kernel panics)
-        // when vsync is disabled, so we default to normal vsync
+        // macOS: Use CADisplayLink for proper frame sync (requires macOS 14+)
+        // Other platforms: Use mailbox if available for lowest latency with vsync
         #[cfg(target_os = "macos")]
         {
-            VsyncMode::Enabled
+            VsyncMode::DisplayLink
         }
         #[cfg(not(target_os = "macos"))]
         {
@@ -128,7 +132,7 @@ mod tests {
         assert_eq!(config.font.family, None);
         assert_eq!(config.font.size, None);
         #[cfg(target_os = "macos")]
-        assert_eq!(config.performance.vsync, VsyncMode::Enabled);
+        assert_eq!(config.performance.vsync, VsyncMode::DisplayLink);
         #[cfg(not(target_os = "macos"))]
         assert_eq!(config.performance.vsync, VsyncMode::MailboxIfAvailable);
     }

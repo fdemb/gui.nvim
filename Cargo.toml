@@ -40,10 +40,12 @@ toml = "0.9.10"
 # macOS: CoreText + objc2 (harfbuzz auto-detects CoreText, no feature needed)
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", features = ["NSString", "NSData", "NSArray"] }
+objc2-foundation = { version = "0.3", features = ["NSString", "NSData", "NSArray", "NSRunLoop", "NSThread"] }
 objc2-core-foundation = { version = "0.3", features = ["CFData", "CFError", "CFBase", "CFString"] }
 objc2-core-text = { version = "0.3", features = ["CTFont", "CTFontManager", "CTFontDescriptor", "CTFontTraits", "objc2-core-graphics"] }
 objc2-core-graphics = { version = "0.3", features = ["CGFont", "CGDataProvider", "CGContext", "CGBitmapContext", "CGColorSpace", "CGPath", "libc"] }
+objc2-app-kit = { version = "0.3", features = ["NSResponder", "NSView", "NSWindow"] }
+objc2-quartz-core = { version = "0.3", features = ["CADisplayLink"] }
 harfbuzz-sys = { version = "0.6", default-features = false }
 
 # Linux: FreeType + fontconfig, harfbuzz with freetype backend (TODO: add when implementing)
@@ -70,4 +72,4 @@ identifier = "com.github.gui-nvim"
 icon = ["assets/icons/gui-nvim.icns"]
 category = "Developer Tool"
 short_description = "GPU-accelerated Neovim GUI"
-osx_minimum_system_version = "11.0"
+osx_minimum_system_version = "14.0"

@@ -8,7 +8,7 @@ use winit::window::{Window, WindowAttributes, WindowId};
 
 use crate::bridge::events::RedrawEvent;
 use crate::bridge::AppBridge;
-use crate::config::Config;
+use crate::config::{Config, VsyncMode};
 use crate::constants::{DEFAULT_COLS, DEFAULT_ROWS, PADDING, PADDING_TOP};
 use crate::editor::EditorState;
 use crate::event::{GUIEvent, NeovimEvent, UserEvent};
@@ -16,6 +16,8 @@ use crate::input::InputHandler;
 use crate::window::render_loop::RenderLoop;
 use crate::window::settings::WindowSettings;
 
+#[cfg(target_os = "macos")]
+use crate::window::displaylink::DisplayLink;
 #[cfg(target_os = "macos")]
 use winit::platform::macos::WindowAttributesExtMacOS;
 
@@ -31,6 +33,8 @@ pub struct GuiApp {
     render_loop: RenderLoop,
     settings: WindowSettings,
     current_scale_factor: f64,
+    #[cfg(target_os = "macos")]
+    display_link: Option<DisplayLink>,
 }
 
 impl GuiApp {
@@ -47,6 +51,8 @@ impl GuiApp {
             render_loop: RenderLoop::new(),
             settings: WindowSettings::new(),
             current_scale_factor: 1.0,
+            #[cfg(target_os = "macos")]
+            display_link: None,
         }
     }
 
@@ -78,6 +84,18 @@ impl GuiApp {
                 log::info!("Window created: {:?}", window.id());
                 self.current_scale_factor = window.scale_factor();
                 self.update_padding(self.current_scale_factor);
+
+                // Initialize display link for frame synchronization (macOS 14+)
+                #[cfg(target_os = "macos")]
+                if self.config.performance.vsync == VsyncMode::DisplayLink {
+                    self.display_link = DisplayLink::new(&window);
+                    if self.display_link.is_some() {
+                        log::info!("CADisplayLink initialized for frame synchronization");
+                    } else {
+                        log::warn!("DisplayLink mode requested but CADisplayLink unavailable");
+                    }
+                }
+
                 let window = Arc::new(window);
                 self.window = Some(window.clone());
 
@@ -191,18 +209,34 @@ impl GuiApp {
     }
 
     fn do_render(&mut self) {
+        // If display link is active, only render when frame is ready
+        #[cfg(target_os = "macos")]
+        if let Some(ref display_link) = self.display_link {
+            if !display_link.is_frame_ready() {
+                return;
+            }
+        }
+
         if let Some(window) = &self.window {
-            if self.render_loop.render(
+            let render_result = self.render_loop.render(
                 &self.editor_state,
                 self.settings.cell_metrics.padding_x as f32,
                 self.settings.cell_metrics.padding_y as f32,
                 window,
-            ).is_err() {
+            );
+
+            if render_result.is_err() {
                 if self.render_loop.renderer().is_none() {
                     // Failed or not ready, nothing to do
                 } else {
                     // Out of memory was logged in render_loop
                     self.close_requested = true;
+                }
+            } else {
+                // Frame rendered successfully, request next frame from display link
+                #[cfg(target_os = "macos")]
+                if let Some(ref display_link) = self.display_link {
+                    display_link.request_frame();
                 }
             }
         }
@@ -363,6 +397,23 @@ impl ApplicationHandler<UserEvent> for GuiApp {
             if let Some(window) = &self.window {
                 window.request_redraw();
             }
+        }
+
+        // When display link is active, check if we need to render
+        // and request a redraw when frame becomes ready
+        #[cfg(target_os = "macos")]
+        if let Some(ref display_link) = self.display_link {
+            if display_link.is_frame_ready() {
+                if let Some(window) = &self.window {
+                    window.request_redraw();
+                }
+            }
+            // Use short poll interval when display link is active
+            // The CADisplayLink callback will set frame_ready
+            event_loop.set_control_flow(ControlFlow::WaitUntil(
+                std::time::Instant::now() + Duration::from_millis(1),
+            ));
+            return;
         }
 
         let mode = self.editor_state.current_mode();

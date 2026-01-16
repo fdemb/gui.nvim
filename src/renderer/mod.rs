@@ -11,10 +11,12 @@ pub use context::{GpuContext, GpuContextError};
 pub use grid_renderer::GridRendererError;
 
 use color::{u32_to_linear_rgba, DEFAULT_BG_COLOR, DEFAULT_FG_COLOR};
-use grid_renderer::GridRenderer;
+use grid_renderer::{GridRenderer, RenderParams};
 use pipeline::RenderPipeline;
 
 use std::sync::Arc;
+
+#[cfg(feature = "perf-stats")]
 use std::time::Instant;
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
@@ -88,6 +90,7 @@ impl Renderer {
         Ok(())
     }
 
+    #[cfg(feature = "perf-stats")]
     pub fn render(
         &mut self,
         state: &EditorState,
@@ -98,17 +101,11 @@ impl Renderer {
 
         // Phase 1: Prepare grid (batching, shaping, etc.)
         let prepare_start = Instant::now();
-        let prepare_stats = self.grid_renderer.prepare(
-            &self.ctx,
-            state,
-            self.default_bg,
-            self.default_fg,
-            x_offset,
-            y_offset,
-        );
+        let params = RenderParams::new(self.default_bg, self.default_fg, x_offset, y_offset);
+        let prepare_stats = self.grid_renderer.prepare(&self.ctx, state, params);
         let prepare_duration = prepare_start.elapsed();
 
-        // Phase 2: Recreate atlas bind group (INEFFICIENCY: done every frame)
+        // Phase 2: Recreate atlas bind group
         let bind_group_start = Instant::now();
         self.atlas_bind_group = self.pipeline.create_atlas_bind_group(
             &self.ctx,
@@ -226,6 +223,90 @@ impl Renderer {
             prepare_stats.time_glyph_lookup.as_secs_f64() * 1000.0,
             prepare_stats.time_batching.as_secs_f64() * 1000.0,
         );
+
+        Ok(())
+    }
+
+    #[cfg(not(feature = "perf-stats"))]
+    pub fn render(
+        &mut self,
+        state: &EditorState,
+        x_offset: f32,
+        y_offset: f32,
+    ) -> Result<(), wgpu::SurfaceError> {
+        // Phase 1: Prepare grid (batching, shaping, etc.)
+        let params = RenderParams::new(self.default_bg, self.default_fg, x_offset, y_offset);
+        self.grid_renderer.prepare(&self.ctx, state, params);
+
+        // Phase 2: Recreate atlas bind group
+        self.atlas_bind_group = self.pipeline.create_atlas_bind_group(
+            &self.ctx,
+            self.grid_renderer.atlas().texture_view(),
+            self.grid_renderer.atlas().sampler(),
+        );
+
+        // Phase 3: Get swap chain texture
+        let output = self.ctx.get_current_texture()?;
+        let view = output
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+
+        // Phase 4: Create command encoder and render pass
+        let mut encoder = self
+            .ctx
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Render Encoder"),
+            });
+
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Main Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: self.default_bg[0] as f64,
+                            g: self.default_bg[1] as f64,
+                            b: self.default_bg[2] as f64,
+                            a: 1.0,
+                        }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+
+            render_pass.set_pipeline(self.pipeline.pipeline());
+            render_pass.set_bind_group(0, self.pipeline.uniform_bind_group(), &[]);
+            render_pass.set_bind_group(1, &self.atlas_bind_group, &[]);
+
+            let batcher = self.grid_renderer.batcher();
+
+            if !batcher.backgrounds().is_empty() {
+                render_pass.set_vertex_buffer(0, batcher.backgrounds().buffer().slice(..));
+                render_pass.draw(0..6, 0..batcher.backgrounds().instance_count());
+            }
+
+            if !batcher.glyphs().is_empty() {
+                render_pass.set_vertex_buffer(0, batcher.glyphs().buffer().slice(..));
+                render_pass.draw(0..6, 0..batcher.glyphs().instance_count());
+            }
+
+            if !batcher.decorations().is_empty() {
+                render_pass.set_vertex_buffer(0, batcher.decorations().buffer().slice(..));
+                render_pass.draw(0..6, 0..batcher.decorations().instance_count());
+            }
+        }
+
+        // Phase 5: Submit and present
+        self.ctx.queue.submit(std::iter::once(encoder.finish()));
+        output.present();
 
         Ok(())
     }

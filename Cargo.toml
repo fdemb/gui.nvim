@@ -6,6 +6,10 @@ authors = ["Filip D"]
 description = "GPU-accelerated Neovim GUI"
 license = "MIT"
 
+[features]
+default = []
+perf-stats = []
+
 [dependencies]
 # Neovim communication
 nvim-rs = { version = "0.9.2", features = ["use_tokio"] }

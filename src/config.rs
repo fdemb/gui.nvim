@@ -17,8 +17,8 @@ pub enum VsyncMode {
     Disabled,
     MailboxIfAvailable,
     /// macOS-only: Use CADisplayLink for frame synchronization.
-    /// This provides proper vblank sync without relying on wgpu's broken
-    /// PresentMode::Fifo on macOS. Ignored on other platforms.
+    /// This provides proper vblank sync without relying on wgpu's vsync.
+    /// Ignored on other platforms.
     DisplayLink,
 }
 

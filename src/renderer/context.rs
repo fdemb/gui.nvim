@@ -120,12 +120,12 @@ impl GpuContext {
                     wgpu::PresentMode::AutoVsync
                 }
             }
-            // DisplayLink: CADisplayLink handles timing, use Fifo for buffer management
+            // DisplayLink: CADisplayLink handles timing, no need for wgpu vsync
             // On non-macOS, fall back to AutoVsync
             VsyncMode::DisplayLink => {
                 #[cfg(target_os = "macos")]
                 {
-                    wgpu::PresentMode::Fifo
+                    wgpu::PresentMode::AutoNoVsync
                 }
                 #[cfg(not(target_os = "macos"))]
                 {

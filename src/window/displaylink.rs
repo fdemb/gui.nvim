@@ -1,8 +1,7 @@
 //! macOS CADisplayLink implementation for frame synchronization.
 //!
 //! Uses NSView.displayLink(target:selector:) introduced in macOS 14 to get
-//! proper vblank-synchronized frame callbacks without relying on
-//! broken PresentMode::Fifo on macOS.
+//! proper vblank-synchronized frame callbacks without relying on wgpu's vsync.
 
 use std::cell::Cell;
 use std::sync::atomic::{AtomicBool, Ordering};

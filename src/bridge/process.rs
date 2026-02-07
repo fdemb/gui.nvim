@@ -34,7 +34,10 @@ impl NeovimProcess {
         let current_dir = env::current_dir()?;
         if current_dir.as_os_str() == "/" {
             log::warn!("Current directory is /. This is probably not what you want. Changing to home directory.");
-            env::set_current_dir(env::home_dir().expect("Could not find home directory"))?;
+            let home = dirs::home_dir().ok_or_else(|| {
+                io::Error::new(io::ErrorKind::NotFound, "Could not determine home directory")
+            })?;
+            env::set_current_dir(home)?;
         }
 
         let mut cmd = Command::new(&nvim_path);

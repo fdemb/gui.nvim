@@ -146,19 +146,6 @@ pub fn dump_env() -> Result<usize, EnvError> {
             continue;
         }
 
-        // Skip variables with excluded prefixes
-        if EXCLUDED_PREFIXES
-            .iter()
-            .any(|prefix| key.starts_with(prefix))
-        {
-            continue;
-        }
-
-        // Skip empty values
-        if value.is_empty() {
-            continue;
-        }
-
         // Write in KEY=VALUE format, escaping newlines
         let escaped = value.replace('\n', "\\n").replace('\r', "\\r");
         writeln!(file, "{}={}", key, escaped)?;

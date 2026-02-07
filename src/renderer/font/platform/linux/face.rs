@@ -68,6 +68,10 @@ impl FontFace for Face {
     fn render_glyph(&self, _glyph_id: u32) -> Result<RasterizedGlyph, FaceError> {
         Err(FaceError::NotImplemented)
     }
+
+    fn hb_font(&self) -> &HbFontWrapper {
+        self.hb_font()
+    }
 }
 
 #[cfg(test)]

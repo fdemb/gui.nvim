@@ -62,7 +62,7 @@ impl<F: FontFace + Clone, S: SystemFallback<F>> FallbackResolver<F, S> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::renderer::font::{FaceError, FaceMetrics, RasterizedGlyph};
+    use crate::renderer::font::{FaceError, FaceMetrics, HbFontWrapper, RasterizedGlyph};
 
     // Mock implementation for testing
     struct MockFace {
@@ -100,6 +100,10 @@ mod tests {
                 bearing_y: 10,
                 buffer: crate::renderer::font::GlyphBuffer::Rgb(vec![0; 300]),
             })
+        }
+
+        fn hb_font(&self) -> &HbFontWrapper {
+            unimplemented!("MockFace does not have a HarfBuzz font")
         }
     }
 

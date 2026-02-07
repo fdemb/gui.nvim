@@ -427,7 +427,6 @@ impl GridRenderer {
             let key = GlyphCacheKey::new(glyph.glyph_id, glyph.font_index);
 
             if let Some(cached) = self.atlas.get_glyph_by_id(ctx, &self.collection, key) {
-                self.sync_atlas_generation();
                 self.push_glyph_to_batch(&glyph, &cached, x, y, baseline_y, fg);
             }
 
@@ -458,7 +457,6 @@ impl GridRenderer {
                 self.atlas
                     .get_glyph_by_id_with_stats(ctx, &self.collection, key);
             stats.time_glyph_lookup += lookup_start.elapsed();
-            self.sync_atlas_generation();
 
             if was_cache_hit {
                 stats.glyph_cache_hits += 1;
@@ -493,7 +491,6 @@ impl GridRenderer {
             let key = GlyphCacheKey::new(glyph.glyph_id, glyph.font_index);
 
             if let Some(cached) = self.atlas.get_glyph_by_id(ctx, &self.collection, key) {
-                self.sync_atlas_generation();
                 self.push_glyph_to_batch(glyph, &cached, x, y, baseline_y, fg);
             }
 

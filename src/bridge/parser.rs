@@ -396,11 +396,11 @@ fn as_i64(value: &Value) -> Option<i64> {
 }
 
 fn as_u32(value: &Value) -> Option<u32> {
-    as_u64(value).map(|v| v as u32)
+    as_u64(value).and_then(|v| u32::try_from(v).ok())
 }
 
 fn as_usize(value: &Value) -> Option<usize> {
-    as_u64(value).map(|v| v as usize)
+    as_u64(value).and_then(|v| usize::try_from(v).ok())
 }
 
 #[cfg(test)]

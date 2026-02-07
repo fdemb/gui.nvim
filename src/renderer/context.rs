@@ -120,8 +120,11 @@ impl GpuContext {
                     wgpu::PresentMode::AutoVsync
                 }
             }
-            // DisplayLink: CADisplayLink handles timing, no need for wgpu vsync
-            // On non-macOS, fall back to AutoVsync
+            // DisplayLink: CADisplayLink handles frame pacing, waking the event
+            // loop only when a vblank fires and the editor is dirty. Use
+            // AutoNoVsync so the GPU presents immediately without blocking —
+            // frame timing is already governed by the DisplayLink gate.
+            // On non-macOS, fall back to AutoVsync.
             VsyncMode::DisplayLink => {
                 #[cfg(target_os = "macos")]
                 {

@@ -90,7 +90,7 @@ impl GuiApp {
                 // Initialize display link for frame synchronization (macOS 14+)
                 #[cfg(target_os = "macos")]
                 if self.config.performance.vsync == VsyncMode::DisplayLink {
-                    self.display_link = DisplayLink::new(&window);
+                    self.display_link = DisplayLink::new(&window, self.event_proxy.clone());
                     if self.display_link.is_some() {
                         log::info!("CADisplayLink initialized for frame synchronization");
                     } else {
@@ -157,6 +157,7 @@ impl GuiApp {
             } else {
                 let (cw, ch) = renderer.cell_size();
                 self.update_metrics_and_resize(cw, ch);
+                self.editor_state.mark_dirty();
 
                 if let Some(ref window) = self.window {
                     window.request_redraw();
@@ -219,6 +220,17 @@ impl GuiApp {
             }
         }
 
+        // Skip rendering if nothing has changed since the last frame.
+        // Consume the vblank regardless so the DisplayLink ready flag
+        // is cleared and we don't spin-loop in about_to_wait().
+        if !self.editor_state.is_dirty() {
+            #[cfg(target_os = "macos")]
+            if let Some(ref display_link) = self.display_link {
+                display_link.request_frame();
+            }
+            return;
+        }
+
         if let Some(window) = &self.window {
             let render_result = self.render_loop.render(
                 &self.editor_state,
@@ -235,7 +247,10 @@ impl GuiApp {
                     self.close_requested = true;
                 }
             } else {
-                // Frame rendered successfully, request next frame from display link
+                // Frame rendered successfully — clear dirty flag and
+                // request next frame from display link
+                self.editor_state.clear_dirty();
+
                 #[cfg(target_os = "macos")]
                 if let Some(ref display_link) = self.display_link {
                     display_link.request_frame();
@@ -288,6 +303,9 @@ impl ApplicationHandler<UserEvent> for GuiApp {
                             bridge.resize(cols, rows);
                         }
                     }
+
+                    // Mark dirty so the resized frame gets rendered
+                    self.editor_state.mark_dirty();
 
                     let _ = self
                         .event_proxy
@@ -362,24 +380,33 @@ impl ApplicationHandler<UserEvent> for GuiApp {
 
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: UserEvent) {
         match event {
-            UserEvent::Neovim(neovim_event) => {
-                match neovim_event {
-                    NeovimEvent::Redraw(events) => {
-                        self.apply_redraw_events(events);
-                    }
-                    NeovimEvent::Flush => {}
-                    NeovimEvent::Quit => {
-                        self.close_requested = true;
-                        _event_loop.exit();
+            UserEvent::Neovim(neovim_event) => match neovim_event {
+                NeovimEvent::Redraw(events) => {
+                    self.apply_redraw_events(events);
+                    if let Some(window) = &self.window {
+                        window.request_redraw();
                     }
                 }
-                if let Some(window) = &self.window {
-                    window.request_redraw();
+                NeovimEvent::Quit => {
+                    self.close_requested = true;
+                    _event_loop.exit();
                 }
-            }
+            },
             UserEvent::GUI(event) => {
-                if let GUIEvent::ScaleFactorChanged(scale_factor) = event {
-                    self.update_layout(scale_factor);
+                match event {
+                    GUIEvent::ScaleFactorChanged(scale_factor) => {
+                        self.update_layout(scale_factor);
+                    }
+                    GUIEvent::RedrawRequested => {
+                        // DisplayLink vblank arrived — request a redraw if we
+                        // have pending changes so the frame is presented promptly.
+                        if self.editor_state.is_dirty() {
+                            if let Some(window) = &self.window {
+                                window.request_redraw();
+                            }
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
@@ -392,7 +419,7 @@ impl ApplicationHandler<UserEvent> for GuiApp {
 
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards")
+            .unwrap_or_default()
             .as_millis() as u64;
 
         if self.editor_state.update_blink(now) {
@@ -401,21 +428,17 @@ impl ApplicationHandler<UserEvent> for GuiApp {
             }
         }
 
-        // When display link is active, check if we need to render
-        // and request a redraw when frame becomes ready
+        // When display link is active, it wakes the event loop via EventLoopProxy
+        // on each vblank. Only request a redraw if a frame is ready AND we have
+        // something to render. Without the dirty check, we'd spin-loop:
+        // about_to_wait -> request_redraw -> do_render (no-op) -> about_to_wait -> ...
         #[cfg(target_os = "macos")]
         if let Some(ref display_link) = self.display_link {
-            if display_link.is_frame_ready() {
+            if display_link.is_frame_ready() && self.editor_state.is_dirty() {
                 if let Some(window) = &self.window {
                     window.request_redraw();
                 }
             }
-            // Use short poll interval when display link is active
-            // The CADisplayLink callback will set frame_ready
-            event_loop.set_control_flow(ControlFlow::WaitUntil(
-                std::time::Instant::now() + Duration::from_millis(1),
-            ));
-            return;
         }
 
         let mode = self.editor_state.current_mode();

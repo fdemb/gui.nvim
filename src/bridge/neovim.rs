@@ -2,7 +2,6 @@ use async_trait::async_trait;
 use nvim_rs::{Handler, Neovim, Value};
 use winit::event_loop::EventLoopProxy;
 
-use super::events::RedrawEvent;
 use super::parser::parse_redraw;
 use super::NvimWriter;
 use crate::event::{NeovimEvent, UserEvent};
@@ -38,12 +37,9 @@ impl Handler for NeovimHandler {
                     return;
                 }
 
-                let has_flush = events.iter().any(|e| matches!(e, RedrawEvent::Flush));
+                // Send all events (including Flush) in a single batch.
+                // The window handler will request a redraw for this event.
                 self.send_event(NeovimEvent::Redraw(events));
-
-                if has_flush {
-                    self.send_event(NeovimEvent::Flush);
-                }
             }
             _ => {
                 log::debug!("Unhandled notification: {}", name);

@@ -1,4 +1,4 @@
-use objc2_core_foundation::{CFRange, CFRetained, CFString, CGFloat, CGPoint, CGRect};
+use objc2_core_foundation::{CFRetained, CFString, CGFloat, CGPoint, CGRect};
 use objc2_core_graphics::{CGBitmapInfo, CGColorSpace, CGGlyph};
 use objc2_core_text::{CTFont, CTFontOrientation, CTFontSymbolicTraits};
 
@@ -231,7 +231,8 @@ impl Face {
     }
 
     pub fn render_glyph(&self, glyph_id: u32) -> Result<RasterizedGlyph, FaceError> {
-        let glyph = glyph_id as CGGlyph;
+        let glyph: CGGlyph =
+            u16::try_from(glyph_id).map_err(|_| FaceError::GlyphNotFound(glyph_id))?;
         let mut glyphs = [glyph];
 
         let rect = unsafe {
@@ -380,14 +381,6 @@ impl Face {
         }
         GlyphBuffer::Rgb(rgb)
     }
-
-    #[allow(dead_code)]
-    pub fn create_for_string(&self, text: &str) -> CFRetained<CTFont> {
-        let cf_string = CFString::from_str(text);
-        let range = CFRange::new(0, text.encode_utf16().count() as isize);
-
-        unsafe { self.ct_font.for_string(&cf_string, range) }
-    }
 }
 
 impl FontFace for Face {
@@ -409,6 +402,10 @@ impl FontFace for Face {
 
     fn render_glyph(&self, glyph_id: u32) -> Result<RasterizedGlyph, FaceError> {
         self.render_glyph(glyph_id)
+    }
+
+    fn hb_font(&self) -> &HbFontWrapper {
+        self.hb_font()
     }
 }
 

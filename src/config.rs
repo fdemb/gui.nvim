@@ -50,8 +50,6 @@ pub struct FontSettings {
     pub size: Option<f32>,
 }
 
-
-
 impl FontSettings {
     pub fn from_guifont(guifont: &str) -> Option<Self> {
         if guifont.is_empty() {
@@ -59,7 +57,8 @@ impl FontSettings {
         }
 
         // Handle list of fonts (take first)
-        let first_font = guifont.split(',').next().unwrap_or(guifont);
+        // Safety: split().next() always returns Some for non-empty strings
+        let first_font = guifont.split(',').next().unwrap();
 
         if let Some((family, size_str)) = first_font.rsplit_once(":h") {
             let size = size_str.parse::<f32>().ok();

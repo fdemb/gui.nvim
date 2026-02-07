@@ -78,6 +78,9 @@ pub struct EditorState {
     default_cols: usize,
     #[allow(dead_code)]
     default_rows: usize,
+    /// Whether the editor state has changed since the last render.
+    /// Set by any mutation; cleared by the renderer after drawing a frame.
+    dirty: bool,
 }
 
 impl EditorState {
@@ -98,6 +101,7 @@ impl EditorState {
             current_mode: 0,
             default_cols: cols,
             default_rows: rows,
+            dirty: true,
         }
     }
 
@@ -129,6 +133,21 @@ impl EditorState {
         self.modes.get(self.current_mode).unwrap_or(&self.modes[0])
     }
 
+    /// Returns `true` if the editor state has changed since the last render.
+    pub fn is_dirty(&self) -> bool {
+        self.dirty
+    }
+
+    /// Marks the state as dirty, requiring a re-render.
+    pub fn mark_dirty(&mut self) {
+        self.dirty = true;
+    }
+
+    /// Clears the dirty flag after a frame has been rendered.
+    pub fn clear_dirty(&mut self) {
+        self.dirty = false;
+    }
+
     /// Handles a grid_resize event.
     pub fn grid_resize(&mut self, grid_id: u64, width: usize, height: usize) {
         if let Some(grid) = self.grids.get_mut(&grid_id) {
@@ -137,6 +156,7 @@ impl EditorState {
             self.grids
                 .insert(grid_id, Grid::new(grid_id, width, height));
         }
+        self.dirty = true;
     }
 
     /// Handles a grid_clear event.
@@ -144,6 +164,7 @@ impl EditorState {
         if let Some(grid) = self.grids.get_mut(&grid_id) {
             grid.clear();
         }
+        self.dirty = true;
     }
 
     /// Handles a grid_line event.
@@ -157,6 +178,7 @@ impl EditorState {
         if let Some(grid) = self.grids.get_mut(&grid_id) {
             grid.update_line(row, col_start, cells);
         }
+        self.dirty = true;
     }
 
     /// Handles a grid_scroll event.
@@ -172,6 +194,7 @@ impl EditorState {
         if let Some(grid) = self.grids.get_mut(&grid_id) {
             grid.scroll(top, bot, left, right, rows);
         }
+        self.dirty = true;
     }
 
     /// Handles a grid_cursor_goto event.
@@ -180,11 +203,13 @@ impl EditorState {
         self.cursor.row = row;
         self.cursor.col = col;
         self.reset_blink();
+        self.dirty = true;
     }
 
     /// Handles a hl_attr_define event.
     pub fn hl_attr_define(&mut self, id: u64, attrs: HighlightAttributes) {
         self.highlights.define(id, attrs);
+        self.dirty = true;
     }
 
     /// Handles a default_colors_set event.
@@ -194,6 +219,7 @@ impl EditorState {
             Color::from_u24(bg),
             Color::from_u24(sp),
         );
+        self.dirty = true;
     }
 
     /// Handles a mode_info_set event.
@@ -203,12 +229,14 @@ impl EditorState {
             self.modes.push(ModeInfo::default());
         }
         self.reset_blink();
+        self.dirty = true;
     }
 
     /// Handles a mode_change event.
     pub fn mode_change(&mut self, _mode: &str, mode_idx: usize) {
         self.current_mode = mode_idx;
         self.reset_blink();
+        self.dirty = true;
     }
 
     /// Resets the blink timer (e.g. on cursor move).
@@ -226,13 +254,21 @@ impl EditorState {
             self.cursor.last_blink_time = now;
             self.cursor.blink_reset_pending = false;
             self.cursor.blink_visible = true;
-            return !old_visible;
+            let changed = !old_visible;
+            if changed {
+                self.dirty = true;
+            }
+            return changed;
         }
 
         let mode = self.current_mode();
         if mode.blink_on == 0 || mode.blink_off == 0 {
             self.cursor.blink_visible = true;
-            return !old_visible;
+            let changed = !old_visible;
+            if changed {
+                self.dirty = true;
+            }
+            return changed;
         }
 
         let elapsed = now.saturating_sub(self.cursor.last_blink_time);
@@ -240,7 +276,11 @@ impl EditorState {
 
         if elapsed < wait {
             self.cursor.blink_visible = true;
-            return !old_visible;
+            let changed = !old_visible;
+            if changed {
+                self.dirty = true;
+            }
+            return changed;
         }
 
         let blink_elapsed = elapsed - wait;
@@ -248,13 +288,21 @@ impl EditorState {
 
         if cycle == 0 {
             self.cursor.blink_visible = true;
-            return !old_visible;
+            let changed = !old_visible;
+            if changed {
+                self.dirty = true;
+            }
+            return changed;
         }
 
         let phase = blink_elapsed % cycle;
         self.cursor.blink_visible = phase < (mode.blink_on as u64);
 
-        self.cursor.blink_visible != old_visible
+        let changed = self.cursor.blink_visible != old_visible;
+        if changed {
+            self.dirty = true;
+        }
+        changed
     }
 
     /// Process a RedrawEvent to update the editor state.
@@ -311,6 +359,7 @@ impl EditorState {
                 // Never destroy the main grid (ID 1).
                 if *grid != 1 {
                     self.grids.remove(grid);
+                    self.dirty = true;
                 }
             }
             RedrawEvent::Flush => {

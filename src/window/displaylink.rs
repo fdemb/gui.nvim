@@ -2,6 +2,10 @@
 //!
 //! Uses NSView.displayLink(target:selector:) introduced in macOS 14 to get
 //! proper vblank-synchronized frame callbacks without relying on wgpu's vsync.
+//!
+//! The DisplayLink callback wakes the winit event loop via `EventLoopProxy`
+//! so the app can use `ControlFlow::Wait` instead of polling, eliminating
+//! idle CPU usage between frames.
 
 use std::cell::Cell;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -12,22 +16,34 @@ use objc2::{define_class, msg_send, sel, DefinedClass, MainThreadOnly};
 use objc2_app_kit::NSView;
 use objc2_foundation::{MainThreadMarker, NSObject, NSObjectProtocol, NSRunLoop};
 use objc2_quartz_core::CADisplayLink;
+use winit::event_loop::EventLoopProxy;
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::window::Window;
 
+use crate::event::{GUIEvent, UserEvent};
+
 struct FrameState {
     ready: AtomicBool,
+    /// Event proxy to wake the winit event loop on vblank.
+    event_proxy: EventLoopProxy<UserEvent>,
 }
 
 impl FrameState {
-    fn new() -> Arc<Self> {
+    fn new(event_proxy: EventLoopProxy<UserEvent>) -> Arc<Self> {
         Arc::new(Self {
             ready: AtomicBool::new(true),
+            event_proxy,
         })
     }
 
     fn set_ready(&self) {
-        self.ready.store(true, Ordering::Release);
+        // Only wake the event loop if transitioning from not-ready to ready,
+        // avoiding redundant wakeups when frames aren't being consumed.
+        if !self.ready.swap(true, Ordering::AcqRel) {
+            let _ = self
+                .event_proxy
+                .send_event(UserEvent::GUI(GUIEvent::RedrawRequested));
+        }
     }
 
     fn is_ready(&self) -> bool {
@@ -75,6 +91,11 @@ impl DisplayLinkTarget {
 }
 
 /// CADisplayLink wrapper for macOS frame synchronization.
+///
+/// The CADisplayLink callback fires at the display's refresh rate (e.g. 60Hz)
+/// and wakes the winit event loop via `EventLoopProxy`. This allows the event
+/// loop to sleep between frames using `ControlFlow::Wait`, resulting in near-zero
+/// idle CPU usage.
 pub struct DisplayLink {
     _target: Retained<DisplayLinkTarget>,
     link: Retained<CADisplayLink>,
@@ -84,9 +105,12 @@ pub struct DisplayLink {
 impl DisplayLink {
     /// Create a new DisplayLink for the given window.
     ///
+    /// The `event_proxy` is used to wake the winit event loop when a vblank
+    /// occurs, so the app doesn't need to poll.
+    ///
     /// Returns `None` if the window handle cannot be obtained or the
     /// display link cannot be created.
-    pub fn new(window: &Window) -> Option<Self> {
+    pub fn new(window: &Window, event_proxy: EventLoopProxy<UserEvent>) -> Option<Self> {
         let mtm = MainThreadMarker::new()?;
 
         let handle = window.window_handle().ok()?;
@@ -97,7 +121,7 @@ impl DisplayLink {
 
         let view: &NSView = unsafe { ns_view.cast::<NSView>().as_ref() };
 
-        let frame_state = FrameState::new();
+        let frame_state = FrameState::new(event_proxy);
         let target = DisplayLinkTarget::new(mtm, Arc::clone(&frame_state));
 
         let selector = sel!(onDisplayLink:);

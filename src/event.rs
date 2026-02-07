@@ -14,7 +14,6 @@ pub enum UserEvent {
 #[derive(Debug, Clone)]
 pub enum NeovimEvent {
     Redraw(Vec<RedrawEvent>),
-    Flush,
     Quit,
 }
 
@@ -47,11 +46,9 @@ mod tests {
     #[test]
     fn test_neovim_event_variants() {
         let redraw = NeovimEvent::Redraw(vec![]);
-        let flush = NeovimEvent::Flush;
         let quit = NeovimEvent::Quit;
 
         assert!(matches!(redraw, NeovimEvent::Redraw(_)));
-        assert!(matches!(flush, NeovimEvent::Flush));
         assert!(matches!(quit, NeovimEvent::Quit));
     }
 }

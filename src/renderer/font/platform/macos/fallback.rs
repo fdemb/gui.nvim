@@ -63,11 +63,11 @@ pub fn create_fallback_resolver(
 pub fn create_fallback_resolver_with_embedded(
     base_face: &Face,
 ) -> Option<crate::renderer::font::fallback::FallbackResolver<Face, CoreTextSystemFallback>> {
-    use super::super::super::loader::EMBEDDED_NERD_FONT;
     use super::loader::create_font_from_bytes;
+    use crate::renderer::font::embedded::NERD_FONT_DATA;
 
     let size_px = base_face.size_px();
-    let ct_font = create_font_from_bytes(EMBEDDED_NERD_FONT, size_px)?;
+    let ct_font = create_font_from_bytes(NERD_FONT_DATA, size_px)?;
     let nerd_font = Face::from_ct_font(ct_font, size_px).ok()?;
 
     log::info!("Loaded embedded Nerd Font: size={}px", size_px);

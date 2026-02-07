@@ -1,5 +1,13 @@
 use crate::config::FontSettings;
 
+/// RAII wrapper around a HarfBuzz `hb_font_t` raw pointer.
+///
+/// # Thread Safety
+///
+/// `HbFontWrapper` is intentionally neither `Send` nor `Sync` because it holds
+/// a raw `*mut hb_font_t`. HarfBuzz font objects are not thread-safe, so `Face`
+/// (which contains an `HbFontWrapper`) must only be used from the thread that
+/// created it. This is consistent with the single-threaded rendering architecture.
 pub struct HbFontWrapper {
     ptr: *mut harfbuzz_sys::hb_font_t,
 }
@@ -109,7 +117,6 @@ pub(crate) fn default_font_family() -> String {
 }
 
 #[derive(Debug, Clone, Copy)]
-#[allow(dead_code)]
 pub struct FaceMetrics {
     pub cell_width: f32,
     pub cell_height: f32,
@@ -148,6 +155,8 @@ pub enum FaceError {
     HarfBuzzFaceCreation,
     #[error("Failed to copy font table")]
     TableCopyFailed,
+    #[error("Glyph ID {0} out of range for this font backend")]
+    GlyphNotFound(u32),
     #[error("Platform not implemented")]
     NotImplemented,
 }

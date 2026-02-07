@@ -21,12 +21,18 @@ impl SystemFallback<Face> for WindowsSystemFallback {
     }
 }
 
-/// Creates a FallbackResolver with system fallback only (no embedded nerd font).
+/// Creates a FallbackResolver, optionally with a nerd font for icon support.
 pub fn create_fallback_resolver(
     _base_face: &Face,
+    nerd_font: Option<Face>,
 ) -> FallbackResolver<Face, WindowsSystemFallback> {
     let system_fallback = WindowsSystemFallback;
-    FallbackResolver::new(system_fallback)
+    let resolver = FallbackResolver::new(system_fallback);
+    if let Some(nerd_font) = nerd_font {
+        resolver.with_nerd_font(nerd_font)
+    } else {
+        resolver
+    }
 }
 
 /// Creates a FallbackResolver with embedded nerd font support.
@@ -55,7 +61,7 @@ mod tests {
     #[test]
     fn test_create_fallback_resolver() {
         let face = Face;
-        let resolver = create_fallback_resolver(&face);
+        let resolver = create_fallback_resolver(&face, None);
         let _ = resolver;
     }
 }

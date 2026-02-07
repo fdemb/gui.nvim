@@ -228,6 +228,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
     fn test_collection_creation() {
         let collection = Collection::new("Menlo", 14.0, 72.0);
         assert!(
@@ -237,6 +238,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
     fn test_collection_metrics() {
         let collection = Collection::new("Menlo", 14.0, 72.0).unwrap();
         let metrics = collection.metrics();
@@ -246,6 +248,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
     fn test_collection_get_face() {
         let collection = Collection::new("Menlo", 14.0, 72.0).unwrap();
 
@@ -257,6 +260,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
     fn test_collection_resolve_glyph() {
         let mut collection = Collection::new("Menlo", 14.0, 72.0).unwrap();
 
@@ -270,6 +274,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
     fn test_collection_fallback_discovery() {
         let mut collection = Collection::new("Menlo", 14.0, 72.0).unwrap();
 
@@ -286,6 +291,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
     fn test_collection_nerd_font_fallback() {
         let mut collection = Collection::new("Menlo", 14.0, 72.0).unwrap();
 

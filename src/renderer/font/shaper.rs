@@ -338,6 +338,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
     fn test_shape_simple_text() {
         let collection = Collection::new("Menlo", 14.0, 72.0).unwrap();
         let mut shaper = Shaper::new();
@@ -355,6 +356,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
     fn test_shape_with_collection() {
         let mut collection = Collection::new("Menlo", 14.0, 72.0).unwrap();
         let mut shaper = Shaper::new();
@@ -369,6 +371,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
     fn test_shape_ligature_potential() {
         let collection = Collection::new("Menlo", 14.0, 72.0).unwrap();
         let mut shaper = Shaper::new();
@@ -386,6 +389,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
     fn test_shape_cluster_indices() {
         let collection = Collection::new("Menlo", 14.0, 72.0).unwrap();
         let mut shaper = Shaper::new();
@@ -409,6 +413,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
     fn test_shape_advances() {
         let collection = Collection::new("Menlo", 14.0, 72.0).unwrap();
         let mut shaper = Shaper::new();
@@ -423,35 +428,35 @@ mod tests {
         // The x_advance should be positive (in 26.6 fixed point)
         assert!(shaped[0].x_advance > 0, "x_advance should be positive");
     }
-}
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn test_shape_nerd_font_icons() {
+        let mut collection = Collection::new("Menlo", 14.0, 72.0).unwrap();
+        let mut shaper = Shaper::new();
 
-#[test]
-fn test_shape_nerd_font_icons() {
-    let mut collection = Collection::new("Menlo", 14.0, 72.0).unwrap();
-    let mut shaper = Shaper::new();
+        // Test a string with nerd font icons
+        let nerd_icon = "\u{E62B}"; // Seti-UI icon
+        let run = TextRun {
+            text: nerd_icon,
+            style: Style::Regular,
+        };
 
-    // Test a string with nerd font icons
-    let nerd_icon = "\u{E62B}"; // Seti-UI icon
-    let run = TextRun {
-        text: nerd_icon,
-        style: Style::Regular,
-    };
+        let shaped = shaper.shape_with_collection(&run, &mut collection);
 
-    let shaped = shaper.shape_with_collection(&run, &mut collection);
+        println!("Shaped {} glyphs for nerd icon", shaped.len());
+        for glyph in &shaped {
+            println!(
+                "  glyph_id={}, font_index={:?}, advance={}",
+                glyph.glyph_id, glyph.font_index, glyph.x_advance
+            );
+        }
 
-    println!("Shaped {} glyphs for nerd icon", shaped.len());
-    for glyph in &shaped {
-        println!(
-            "  glyph_id={}, font_index={:?}, advance={}",
-            glyph.glyph_id, glyph.font_index, glyph.x_advance
+        assert!(!shaped.is_empty(), "Should produce glyphs for nerd icon");
+        // The glyph_id should NOT be 0 (.notdef)
+        assert!(
+            shaped[0].glyph_id != 0,
+            "Glyph ID should not be 0 (.notdef), got {}",
+            shaped[0].glyph_id
         );
     }
-
-    assert!(!shaped.is_empty(), "Should produce glyphs for nerd icon");
-    // The glyph_id should NOT be 0 (.notdef)
-    assert!(
-        shaped[0].glyph_id != 0,
-        "Glyph ID should not be 0 (.notdef), got {}",
-        shaped[0].glyph_id
-    );
 }

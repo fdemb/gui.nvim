@@ -34,6 +34,7 @@ clap = { version = "4", features = ["derive"] }
 # Utilities
 ahash = "0.8"
 dirs = "6"
+which = "7"
 bitflags = "2"
 compact_str = "0.8"
 log = { version = "0.4", features = ["release_max_level_info"] }

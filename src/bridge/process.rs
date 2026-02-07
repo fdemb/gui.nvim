@@ -132,13 +132,7 @@ fn which_nvim(path: &str) -> bool {
     if path.contains('/') || path.contains('\\') {
         std::path::Path::new(path).exists()
     } else {
-        std::process::Command::new("which")
-            .arg(path)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false)
+        which::which(path).is_ok()
     }
 }
 

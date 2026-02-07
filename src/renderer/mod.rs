@@ -29,6 +29,8 @@ pub struct Renderer {
     pipeline: RenderPipeline,
     grid_renderer: GridRenderer,
     atlas_bind_group: wgpu::BindGroup,
+    /// Tracks atlas generation to avoid recreating the bind group every frame.
+    atlas_bind_group_generation: u64,
     default_bg: [f32; 4],
     default_fg: [f32; 4],
 }
@@ -51,11 +53,14 @@ impl Renderer {
         let default_bg = u32_to_linear_rgba(DEFAULT_BG_COLOR);
         let default_fg = u32_to_linear_rgba(DEFAULT_FG_COLOR);
 
+        let atlas_bind_group_generation = grid_renderer.atlas().generation();
+
         Ok(Self {
             ctx,
             pipeline,
             grid_renderer,
             atlas_bind_group,
+            atlas_bind_group_generation,
             default_bg,
             default_fg,
         })
@@ -87,7 +92,23 @@ impl Renderer {
         let (cell_width, cell_height) = self.grid_renderer.cell_size();
         self.pipeline
             .update_cell_size(&self.ctx, cell_width, cell_height);
+        // Font change clears the atlas, so force bind group refresh
+        self.sync_atlas_bind_group();
         Ok(())
+    }
+
+    /// Recreate the atlas bind group only when the atlas texture has changed
+    /// (resize or clear), avoiding redundant GPU object creation every frame.
+    fn sync_atlas_bind_group(&mut self) {
+        let current_gen = self.grid_renderer.atlas().generation();
+        if current_gen != self.atlas_bind_group_generation {
+            self.atlas_bind_group = self.pipeline.create_atlas_bind_group(
+                &self.ctx,
+                self.grid_renderer.atlas().texture_view(),
+                self.grid_renderer.atlas().sampler(),
+            );
+            self.atlas_bind_group_generation = current_gen;
+        }
     }
 
     #[cfg(feature = "perf-stats")]
@@ -105,13 +126,9 @@ impl Renderer {
         let prepare_stats = self.grid_renderer.prepare(&self.ctx, state, params);
         let prepare_duration = prepare_start.elapsed();
 
-        // Phase 2: Recreate atlas bind group
+        // Phase 2: Recreate atlas bind group only if the atlas texture changed
         let bind_group_start = Instant::now();
-        self.atlas_bind_group = self.pipeline.create_atlas_bind_group(
-            &self.ctx,
-            self.grid_renderer.atlas().texture_view(),
-            self.grid_renderer.atlas().sampler(),
-        );
+        self.sync_atlas_bind_group();
         let bind_group_duration = bind_group_start.elapsed();
 
         // Phase 3: Get swap chain texture
@@ -238,12 +255,8 @@ impl Renderer {
         let params = RenderParams::new(self.default_bg, self.default_fg, x_offset, y_offset);
         self.grid_renderer.prepare(&self.ctx, state, params);
 
-        // Phase 2: Recreate atlas bind group
-        self.atlas_bind_group = self.pipeline.create_atlas_bind_group(
-            &self.ctx,
-            self.grid_renderer.atlas().texture_view(),
-            self.grid_renderer.atlas().sampler(),
-        );
+        // Phase 2: Recreate atlas bind group only if the atlas texture changed
+        self.sync_atlas_bind_group();
 
         // Phase 3: Get swap chain texture
         let output = self.ctx.get_current_texture()?;

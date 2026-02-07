@@ -5,9 +5,7 @@
 //! - `IDWriteFontFallback` for fallback discovery
 //! - `hb_font_create` or `hb_directwrite_font_create` for HarfBuzz integration
 
-use crate::renderer::font::{
-    FaceError, FaceMetrics, FontFace, GlyphBuffer, HbFontWrapper, RasterizedGlyph,
-};
+use crate::renderer::font::{FaceError, FaceMetrics, FontFace, HbFontWrapper, RasterizedGlyph};
 
 pub struct Face;
 
@@ -68,14 +66,7 @@ impl FontFace for Face {
     }
 
     fn render_glyph(&self, _glyph_id: u32) -> Result<RasterizedGlyph, FaceError> {
-        Ok(RasterizedGlyph {
-            character: '\0',
-            width: 0,
-            height: 0,
-            bearing_x: 0,
-            bearing_y: 0,
-            buffer: GlyphBuffer::Rgba(Vec::new()),
-        })
+        Err(FaceError::NotImplemented)
     }
 }
 

@@ -4,10 +4,16 @@ use super::font::{
 };
 use super::GpuContext;
 
-const ATLAS_SIZE: u32 = 1024;
+const INITIAL_ATLAS_SIZE: u32 = 1024;
+const MAX_ATLAS_SIZE: u32 = 8192;
 const ATLAS_PADDING: u32 = 1;
 
 /// Texture atlas for storing rasterized glyphs.
+///
+/// Starts at `INITIAL_ATLAS_SIZE` and grows by doubling when full, up to
+/// `MAX_ATLAS_SIZE`. Existing glyph data is preserved via GPU texture copy.
+/// The `generation` counter increments on each resize so consumers (e.g. the
+/// renderer's bind group and UV inverse) can detect when they need to update.
 pub struct GlyphAtlas {
     texture: wgpu::Texture,
     texture_view: wgpu::TextureView,
@@ -17,27 +23,15 @@ pub struct GlyphAtlas {
     current_row_x: u32,
     current_row_height: u32,
     cache: ShapedGlyphCache,
+    /// Incremented each time the atlas texture is resized.
+    generation: u64,
 }
 
 impl GlyphAtlas {
     pub fn new(ctx: &GpuContext) -> Self {
-        let size = ATLAS_SIZE;
+        let size = INITIAL_ATLAS_SIZE;
 
-        let texture = ctx.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("Glyph Atlas"),
-            size: wgpu::Extent3d {
-                width: size,
-                height: size,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-
+        let texture = Self::create_texture(ctx, size);
         let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         let sampler = ctx.device.create_sampler(&wgpu::SamplerDescriptor {
@@ -60,6 +54,7 @@ impl GlyphAtlas {
             current_row_x: 0,
             current_row_height: 0,
             cache: ShapedGlyphCache::new(),
+            generation: 0,
         }
     }
 
@@ -73,6 +68,32 @@ impl GlyphAtlas {
 
     pub fn atlas_size(&self) -> u32 {
         self.size
+    }
+
+    /// Generation counter that increments on each atlas resize.
+    /// Consumers use this to detect when cached UV inverses or bind groups
+    /// are stale.
+    pub fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    fn create_texture(ctx: &GpuContext, size: u32) -> wgpu::Texture {
+        ctx.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Glyph Atlas"),
+            size: wgpu::Extent3d {
+                width: size,
+                height: size,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_DST
+                | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        })
     }
 
     /// Get a glyph by ID, or rasterize and cache it.
@@ -135,7 +156,25 @@ impl GlyphAtlas {
 
         let (atlas_x, atlas_y) = match self.allocate(rasterized.width, rasterized.height) {
             Some(coords) => coords,
-            None => return (None, false),
+            None => {
+                // Atlas is full — try to grow and retry the allocation.
+                if self.grow(ctx) {
+                    match self.allocate(rasterized.width, rasterized.height) {
+                        Some(coords) => coords,
+                        None => {
+                            log::error!(
+                                "Glyph {}x{} does not fit even after atlas resize to {}",
+                                rasterized.width,
+                                rasterized.height,
+                                self.size,
+                            );
+                            return (None, false);
+                        }
+                    }
+                } else {
+                    return (None, false);
+                }
+            }
         };
         self.upload(ctx, &rasterized, atlas_x, atlas_y);
 
@@ -151,6 +190,66 @@ impl GlyphAtlas {
 
         self.cache.insert(key, Some(cached));
         (Some(cached), false)
+    }
+
+    /// Double the atlas texture size, copying existing glyph data to the new
+    /// texture. Returns `true` if growth succeeded, `false` if already at max.
+    fn grow(&mut self, ctx: &GpuContext) -> bool {
+        let new_size = self.size * 2;
+        if new_size > MAX_ATLAS_SIZE {
+            log::error!(
+                "Glyph atlas already at maximum size ({}x{}), cannot grow",
+                self.size,
+                self.size,
+            );
+            return false;
+        }
+
+        log::info!(
+            "Growing glyph atlas from {}x{} to {}x{}",
+            self.size,
+            self.size,
+            new_size,
+            new_size,
+        );
+
+        let new_texture = Self::create_texture(ctx, new_size);
+
+        // Copy existing texture data into the top-left corner of the new texture.
+        let mut encoder = ctx
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Atlas Grow Copy"),
+            });
+        encoder.copy_texture_to_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &self.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyTextureInfo {
+                texture: &new_texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::Extent3d {
+                width: self.size,
+                height: self.size,
+                depth_or_array_layers: 1,
+            },
+        );
+        ctx.queue.submit(std::iter::once(encoder.finish()));
+
+        self.texture = new_texture;
+        self.texture_view = self
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        self.size = new_size;
+        self.generation += 1;
+
+        true
     }
 
     /// Allocate space in the atlas using row-based packing.
@@ -240,23 +339,13 @@ impl GlyphAtlas {
         self.current_row_y = 0;
         self.current_row_height = 0;
 
-        self.texture = ctx.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("Glyph Atlas"),
-            size: wgpu::Extent3d {
-                width: self.size,
-                height: self.size,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
+        // Reset to initial size to reclaim GPU memory after font changes.
+        self.size = INITIAL_ATLAS_SIZE;
+        self.texture = Self::create_texture(ctx, self.size);
         self.texture_view = self
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
+        self.generation += 1;
     }
 
     pub fn prepopulate_ascii(
@@ -405,8 +494,21 @@ mod tests {
 
     #[test]
     fn test_atlas_size_constant() {
-        assert_eq!(ATLAS_SIZE, 1024, "Atlas size should be 1024");
+        assert_eq!(
+            INITIAL_ATLAS_SIZE, 1024,
+            "Initial atlas size should be 1024"
+        );
+        assert_eq!(MAX_ATLAS_SIZE, 8192, "Max atlas size should be 8192");
         assert_eq!(ATLAS_PADDING, 1, "Atlas padding should be 1");
+        // Ensure max is a power-of-two multiple of initial
+        assert!(MAX_ATLAS_SIZE >= INITIAL_ATLAS_SIZE);
+        assert_eq!(MAX_ATLAS_SIZE % INITIAL_ATLAS_SIZE, 0);
+    }
+
+    #[test]
+    fn test_growth_constants_are_powers_of_two() {
+        assert!(INITIAL_ATLAS_SIZE.is_power_of_two());
+        assert!(MAX_ATLAS_SIZE.is_power_of_two());
     }
 
     #[test]

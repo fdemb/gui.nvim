@@ -36,7 +36,12 @@ pub struct RenderParams {
 
 impl RenderParams {
     pub fn new(default_bg: [f32; 4], default_fg: [f32; 4], x_offset: f32, y_offset: f32) -> Self {
-        Self { default_bg, default_fg, x_offset, y_offset }
+        Self {
+            default_bg,
+            default_fg,
+            x_offset,
+            y_offset,
+        }
     }
 }
 
@@ -111,6 +116,8 @@ pub struct GridRenderer {
     baseline_offset: f32,
     /// Inverse of atlas size for UV coordinate calculation (avoids division per glyph).
     atlas_size_inv: f32,
+    /// Tracks atlas generation to detect resizes.
+    atlas_generation: u64,
 }
 
 impl GridRenderer {
@@ -146,6 +153,7 @@ impl GridRenderer {
             metrics,
             baseline_offset,
             atlas_size_inv,
+            atlas_generation: 0,
         })
     }
 
@@ -194,20 +202,26 @@ impl GridRenderer {
         let stats = self.prepare_grid_cells(ctx, state, params);
         self.prepare_cursor(ctx, state, params);
         self.batcher.upload(ctx);
+        self.sync_atlas_generation();
         stats
     }
 
     #[cfg(not(feature = "perf-stats"))]
-    pub fn prepare(
-        &mut self,
-        ctx: &GpuContext,
-        state: &EditorState,
-        params: RenderParams,
-    ) {
+    pub fn prepare(&mut self, ctx: &GpuContext, state: &EditorState, params: RenderParams) {
         self.batcher.clear();
         self.prepare_grid_cells(ctx, state, params);
         self.prepare_cursor(ctx, state, params);
         self.batcher.upload(ctx);
+        self.sync_atlas_generation();
+    }
+
+    /// Update cached atlas inverse size if the atlas was resized during this frame.
+    fn sync_atlas_generation(&mut self) {
+        let current_gen = self.atlas.generation();
+        if current_gen != self.atlas_generation {
+            self.atlas_size_inv = 1.0 / self.atlas.atlas_size() as f32;
+            self.atlas_generation = current_gen;
+        }
     }
 
     #[cfg(feature = "perf-stats")]
@@ -237,7 +251,8 @@ impl GridRenderer {
                 if cell.highlight_id != last_hl_id {
                     last_hl_id = cell.highlight_id;
                     last_attrs = highlights.get(last_hl_id);
-                    let (bg, fg) = self.resolve_colors(last_attrs, params.default_bg, params.default_fg);
+                    let (bg, fg) =
+                        self.resolve_colors(last_attrs, params.default_bg, params.default_fg);
                     last_bg = bg;
                     last_fg = fg;
                 }
@@ -297,12 +312,7 @@ impl GridRenderer {
     }
 
     #[cfg(not(feature = "perf-stats"))]
-    fn prepare_grid_cells(
-        &mut self,
-        ctx: &GpuContext,
-        state: &EditorState,
-        params: RenderParams,
-    ) {
+    fn prepare_grid_cells(&mut self, ctx: &GpuContext, state: &EditorState, params: RenderParams) {
         let grid = state.main_grid();
         let highlights = &state.highlights;
 
@@ -319,7 +329,8 @@ impl GridRenderer {
                 if cell.highlight_id != last_hl_id {
                     last_hl_id = cell.highlight_id;
                     last_attrs = highlights.get(last_hl_id);
-                    let (bg, fg) = self.resolve_colors(last_attrs, params.default_bg, params.default_fg);
+                    let (bg, fg) =
+                        self.resolve_colors(last_attrs, params.default_bg, params.default_fg);
                     last_bg = bg;
                     last_fg = fg;
                 }
@@ -416,6 +427,7 @@ impl GridRenderer {
             let key = GlyphCacheKey::new(glyph.glyph_id, glyph.font_index);
 
             if let Some(cached) = self.atlas.get_glyph_by_id(ctx, &self.collection, key) {
+                self.sync_atlas_generation();
                 self.push_glyph_to_batch(&glyph, &cached, x, y, baseline_y, fg);
             }
 
@@ -446,6 +458,7 @@ impl GridRenderer {
                 self.atlas
                     .get_glyph_by_id_with_stats(ctx, &self.collection, key);
             stats.time_glyph_lookup += lookup_start.elapsed();
+            self.sync_atlas_generation();
 
             if was_cache_hit {
                 stats.glyph_cache_hits += 1;
@@ -464,7 +477,14 @@ impl GridRenderer {
     }
 
     /// Render shaped glyphs from an external slice (for cursor rendering).
-    fn render_glyphs(&mut self, ctx: &GpuContext, run_x: f32, y: f32, glyphs: &[ShapedGlyph], fg: [f32; 4]) {
+    fn render_glyphs(
+        &mut self,
+        ctx: &GpuContext,
+        run_x: f32,
+        y: f32,
+        glyphs: &[ShapedGlyph],
+        fg: [f32; 4],
+    ) {
         let mut x = run_x;
         let baseline_y = y + self.baseline_offset;
         let cell_width = self.metrics.cell_width;
@@ -473,6 +493,7 @@ impl GridRenderer {
             let key = GlyphCacheKey::new(glyph.glyph_id, glyph.font_index);
 
             if let Some(cached) = self.atlas.get_glyph_by_id(ctx, &self.collection, key) {
+                self.sync_atlas_generation();
                 self.push_glyph_to_batch(glyph, &cached, x, y, baseline_y, fg);
             }
 
@@ -483,8 +504,13 @@ impl GridRenderer {
     #[inline(always)]
     fn push_cell_background(&mut self, x: f32, y: f32, bg: [f32; 4], default_bg: [f32; 4]) {
         if bg != default_bg {
-            self.batcher
-                .push_background(x, y, self.metrics.cell_width, self.metrics.cell_height, bg);
+            self.batcher.push_background(
+                x,
+                y,
+                self.metrics.cell_width,
+                self.metrics.cell_height,
+                bg,
+            );
         }
     }
 
@@ -561,12 +587,7 @@ impl GridRenderer {
         &self.batcher
     }
 
-    fn prepare_cursor(
-        &mut self,
-        ctx: &GpuContext,
-        state: &EditorState,
-        params: RenderParams,
-    ) {
+    fn prepare_cursor(&mut self, ctx: &GpuContext, state: &EditorState, params: RenderParams) {
         let cursor = &state.cursor;
         if !cursor.visible || !cursor.blink_visible {
             return;

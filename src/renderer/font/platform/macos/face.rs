@@ -384,7 +384,7 @@ impl Face {
     #[allow(dead_code)]
     pub fn create_for_string(&self, text: &str) -> CFRetained<CTFont> {
         let cf_string = CFString::from_str(text);
-        let range = CFRange::new(0, text.chars().count() as isize);
+        let range = CFRange::new(0, text.encode_utf16().count() as isize);
 
         unsafe { self.ct_font.for_string(&cf_string, range) }
     }

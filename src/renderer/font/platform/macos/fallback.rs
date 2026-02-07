@@ -27,7 +27,7 @@ impl SystemFallback<Face> for CoreTextSystemFallback {
         let ch = char::from_u32(codepoint)?;
         let text = ch.to_string();
         let cf_string = CFString::from_str(&text);
-        let range = CFRange::new(0, 1);
+        let range = CFRange::new(0, ch.len_utf16() as isize);
 
         let fallback_ct_font = unsafe { self.base_font.for_string(&cf_string, range) };
 

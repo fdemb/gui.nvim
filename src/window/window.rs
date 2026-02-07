@@ -39,6 +39,8 @@ pub struct GuiApp {
 
 impl GuiApp {
     pub fn new(event_proxy: EventLoopProxy<UserEvent>, config: Config, args: Vec<String>) -> Self {
+        let mut render_loop = RenderLoop::new();
+        render_loop.set_event_proxy(event_proxy.clone());
         Self {
             window: None,
             event_proxy,
@@ -48,7 +50,7 @@ impl GuiApp {
             close_requested: false,
             input_handler: InputHandler::new(),
             editor_state: EditorState::new(DEFAULT_COLS as usize, DEFAULT_ROWS as usize),
-            render_loop: RenderLoop::new(),
+            render_loop,
             settings: WindowSettings::new(),
             current_scale_factor: 1.0,
             #[cfg(target_os = "macos")]

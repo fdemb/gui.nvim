@@ -307,6 +307,12 @@ impl EditorState {
             RedrawEvent::ModeChange { mode, mode_idx } => {
                 self.mode_change(mode, *mode_idx);
             }
+            RedrawEvent::GridDestroy { grid } => {
+                // Never destroy the main grid (ID 1).
+                if *grid != 1 {
+                    self.grids.remove(grid);
+                }
+            }
             RedrawEvent::Flush => {
                 self.flush();
             }

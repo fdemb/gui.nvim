@@ -204,10 +204,10 @@ impl Shaper {
         style: Style,
         collection: &mut Collection,
     ) -> (&'a str, &'a str, CollectionIndex) {
-        let mut chars = text.char_indices().peekable();
+        let mut chars = text.char_indices();
 
-        if let Some((_, first_char)) = chars.peek() {
-            let first_codepoint = *first_char as u32;
+        if let Some((_, first_char)) = chars.next() {
+            let first_codepoint = first_char as u32;
             let (first_index, _) = collection
                 .resolve_glyph(first_codepoint, style)
                 .unwrap_or((CollectionIndex::primary(style), 0));

@@ -37,6 +37,16 @@ impl Face {
     ) -> Option<Self> {
         None
     }
+
+    /// Returns the HarfBuzz font handle for text shaping.
+    ///
+    /// # Panics
+    ///
+    /// Panics because the Linux font backend is not yet implemented.
+    /// This stub exists to satisfy the interface required by `Shaper`.
+    pub fn hb_font(&self) -> &HbFontWrapper {
+        unimplemented!("Linux HarfBuzz font integration not yet implemented")
+    }
 }
 
 impl FontFace for Face {

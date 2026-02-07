@@ -3,10 +3,12 @@
 
 use std::sync::Arc;
 use std::task::{Context, Poll, Wake, Waker};
+use winit::event_loop::EventLoopProxy;
 use winit::window::Window;
 
 use crate::config::Config;
 use crate::editor::EditorState;
+use crate::event::UserEvent;
 use crate::renderer::Renderer;
 
 pub enum RenderState {
@@ -23,14 +25,34 @@ pub enum RenderState {
     Failed,
 }
 
+/// A waker that sends a user event to the winit event loop, ensuring the
+/// loop wakes up and re-polls the GPU initialization future. This is
+/// necessary because wgpu's `request_adapter`/`request_device` can be
+/// truly async on some backends (Vulkan, DX12).
+struct EventLoopWaker {
+    proxy: EventLoopProxy<UserEvent>,
+}
+
+impl Wake for EventLoopWaker {
+    fn wake(self: Arc<Self>) {
+        // Send a redraw-triggering event so the event loop will call
+        // RedrawRequested, which in turn calls poll() again.
+        let _ = self
+            .proxy
+            .send_event(UserEvent::GUI(crate::event::GUIEvent::Focused(true)));
+    }
+}
+
 pub struct RenderLoop {
     state: RenderState,
+    event_proxy: Option<EventLoopProxy<UserEvent>>,
 }
 
 impl Default for RenderLoop {
     fn default() -> Self {
         Self {
             state: RenderState::Uninitialized,
+            event_proxy: None,
         }
     }
 }
@@ -38,6 +60,10 @@ impl Default for RenderLoop {
 impl RenderLoop {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn set_event_proxy(&mut self, proxy: EventLoopProxy<UserEvent>) {
+        self.event_proxy = Some(proxy);
     }
 
     pub fn initialize(&mut self, window: Arc<Window>, config: Config) {
@@ -49,12 +75,19 @@ impl RenderLoop {
 
         self.state = match state {
             RenderState::Initializing(mut future) => {
-                struct NoopWaker;
-                impl Wake for NoopWaker {
-                    fn wake(self: Arc<Self>) {}
-                }
-
-                let waker = Waker::from(Arc::new(NoopWaker));
+                let waker = if let Some(ref proxy) = self.event_proxy {
+                    Waker::from(Arc::new(EventLoopWaker {
+                        proxy: proxy.clone(),
+                    }))
+                } else {
+                    // Fallback: noop waker. We compensate by always calling
+                    // request_redraw() below when the future is pending.
+                    struct NoopWaker;
+                    impl Wake for NoopWaker {
+                        fn wake(self: Arc<Self>) {}
+                    }
+                    Waker::from(Arc::new(NoopWaker))
+                };
                 let mut cx = Context::from_waker(&waker);
 
                 match future.as_mut().poll(&mut cx) {
@@ -67,6 +100,8 @@ impl RenderLoop {
                         RenderState::Failed
                     }
                     Poll::Pending => {
+                        // Also request a redraw as a safety net so we
+                        // re-poll even if the waker is never invoked.
                         window.request_redraw();
                         RenderState::Initializing(future)
                     }
@@ -79,7 +114,7 @@ impl RenderLoop {
             RenderState::Ready(renderer) => Poll::Ready(Ok(renderer)),
             RenderState::Failed => Poll::Ready(Err(())),
             RenderState::Initializing(_) => Poll::Pending,
-            RenderState::Uninitialized => Poll::Pending, // Should probably be handled
+            RenderState::Uninitialized => Poll::Pending,
         }
     }
 

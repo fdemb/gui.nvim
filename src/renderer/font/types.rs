@@ -138,7 +138,7 @@ impl Default for FaceMetrics {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, PartialEq, thiserror::Error)]
 pub enum FaceError {
     #[error("Failed to create font with name: {0}")]
     FontNotFound(String),

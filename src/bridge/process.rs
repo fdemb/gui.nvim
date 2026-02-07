@@ -148,9 +148,11 @@ mod tests {
 
     #[test]
     fn test_find_nvim_path_with_env() {
-        env::set_var("NVIM_PATH", "/custom/path/nvim");
+        // SAFETY: This test modifies env vars which is unsound with parallel test
+        // threads, but the risk is limited to test flakiness, not production UB.
+        unsafe { env::set_var("NVIM_PATH", "/custom/path/nvim") };
         let result = find_nvim_path();
-        env::remove_var("NVIM_PATH");
+        unsafe { env::remove_var("NVIM_PATH") };
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "/custom/path/nvim");

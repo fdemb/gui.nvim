@@ -172,6 +172,13 @@ pub fn dump_env() -> Result<usize, EnvError> {
 /// Loads environment variables from the config file into the current process.
 ///
 /// Returns the number of variables loaded, or None if the file doesn't exist.
+///
+/// # Safety Requirement
+///
+/// This function calls `std::env::set_var` which is unsound in multithreaded
+/// contexts (UB when other threads concurrently read environment variables).
+/// **Must be called from the main thread before any other threads are spawned.**
+/// Starting in Rust 2024 edition, `set_var` is explicitly `unsafe`.
 pub fn load_env() -> Result<Option<usize>, EnvError> {
     // Don't load if we've already loaded (prevents double-loading)
     if std::env::var("GUI_NVIM_ENV_LOADED").is_ok() {
@@ -204,13 +211,15 @@ pub fn load_env() -> Result<Option<usize>, EnvError> {
             // Unescape newlines
             let unescaped = value.replace("\\n", "\n").replace("\\r", "\r");
 
-            std::env::set_var(key, &unescaped);
+            // SAFETY: Called from main() before any threads are spawned.
+            unsafe { std::env::set_var(key, &unescaped) };
             count += 1;
         }
     }
 
     // Mark as loaded to prevent double-loading
-    std::env::set_var("GUI_NVIM_ENV_LOADED", "1");
+    // SAFETY: Called from main() before any threads are spawned.
+    unsafe { std::env::set_var("GUI_NVIM_ENV_LOADED", "1") };
 
     log::info!("Loaded {} environment variables from {:?}", count, path);
     Ok(Some(count))
